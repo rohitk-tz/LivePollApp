@@ -13,12 +13,14 @@
 
 - **[ADR-001: System Architecture Style](architecture/adr/adr-001-system-architecture-style.md)** - Modular Monolith decision
 - **[ADR-002: Real-Time Communication](architecture/adr/adr-002-realtime-communication.md)** - WebSocket + SSE decision
+- **[ADR-003: Persistence Strategy](architecture/adr/adr-003-persistence-strategy.md)** - Relational Database decision
 
 ### Supporting Documentation
 
 - **[Feature Specification](spec.md)** - User stories, requirements, success criteria
 - **[Validation Report ADR-001](validation-report.md)** - System architecture validation
 - **[Validation Report ADR-002](validation-adr-002.md)** - Real-time communication validation
+- **[Validation Report ADR-003](validation-adr-003.md)** - Persistence strategy validation
 
 ---
 
@@ -49,6 +51,18 @@ This specification documents architectural decisions for the Live Event Polling 
 - **Heartbeat mechanism**: 30-second ping/pong keeps connections alive
 - **Connection scoping**: Session-based subscriptions via query parameters
 - **Load balancer support**: Sticky sessions for WebSocket persistence
+
+### ADR-003: Persistence Strategy
+
+**Decision**: The system will use a Relational Database (RDBMS) as the primary persistence store
+
+**Key Points**:
+- **ACID transactions** guarantee Zero Vote Loss via durability
+- **Database constraints** enforce domain invariants (foreign keys, unique constraints)
+- **Transactional integrity** for atomic vote submission, poll activation
+- **Query flexibility** via SQL aggregations for poll results
+- **Strong consistency** supports read-your-writes guarantee
+- **Read scalability** via read replicas for 2000 concurrent queries
 
 ---
 
@@ -422,6 +436,245 @@ This specification documents architectural decisions for the Live Event Polling 
 
 ---
 
+## ADR-003: Persistence Strategy
+
+### Decision Context
+
+**Zero Vote Loss Principle**: "Once a vote is accepted, it must never be lost, duplicated, or altered."
+
+**Domain Invariants Requiring Enforcement**:
+- **Vote**: One vote per participant per poll (uniqueness)
+- **Vote**: Immutability after acceptance
+- **Vote**: No orphan votes (referential integrity)
+- **Poll**: Only one active poll per session
+- **Poll**: Valid option selection
+- **Session**: Valid state transitions
+
+**Transactional Requirements**:
+- Vote submission: Insert vote + update aggregate atomically
+- Poll activation: Deactivate current + activate new atomically
+- Session end: Close polls + transition participants atomically
+
+**Performance Requirements**:
+- Vote submission: <150ms (p95)
+- Poll results query: <100ms (p95)
+- Concurrent writes: 100 votes/sec burst
+- Concurrent reads: 2000 queries/sec
+
+---
+
+### Why Relational Database (RDBMS)?
+
+**ACID Transactions**:
+- ✅ **Zero Vote Loss**: Durability guarantees vote persistence before acknowledgment
+- ✅ **Atomicity**: All-or-nothing for vote submission, poll activation
+- ✅ **Consistency**: Database constraints enforce domain invariants
+- ✅ **Isolation**: Concurrent votes don't violate uniqueness
+
+**Database Constraints**:
+- ✅ **Primary Keys**: Session, Poll, Vote uniqueness
+- ✅ **Foreign Keys**: Vote → Poll, Vote → Participant, Poll → Session
+- ✅ **Unique Constraints**: One vote per participant per poll, one active poll per session
+- ✅ **Check Constraints**: Valid state values
+
+**Query Flexibility**:
+- ✅ **SQL Aggregations**: Poll results, vote counts, option rankings
+- ✅ **JOINs**: Session → Polls → Votes for comprehensive queries
+- ✅ **Indexes**: Optimize query performance (<100ms target)
+
+**Operational Maturity**:
+- ✅ **Backup/Restore**: Point-in-time recovery for data loss prevention
+- ✅ **Monitoring**: Transaction metrics, query performance, constraint violations
+- ✅ **Team Expertise**: Well-understood operational practices
+
+---
+
+### Alternatives Rejected
+
+**1. Document Database** ❌
+- **No foreign key constraints**: Application must enforce referential integrity
+- **Weaker transactions**: Multi-document transactions less mature
+- **No unique constraints across collections**: One vote per poll harder to enforce
+- **Risk to Zero Vote Loss**: Application bugs can violate invariants
+
+**2. Key-Value Store** ❌
+- **No multi-key transactions**: Cannot atomically update vote + poll aggregate
+- **No query capabilities**: 500 votes = 500 reads for aggregation
+- **Snapshot-based persistence**: Potential data loss between snapshots
+- **No referential integrity**: Application must enforce all constraints
+
+**3. Event Sourcing** ❌
+- **Eventual consistency**: Read model updates asynchronously
+- **Read-your-writes violation**: Participant may not see their vote immediately
+- **Operational complexity**: Two persistence stores (event store + read model)
+- **Overkill**: Time-travel queries not required
+
+**4. In-Memory Only** ❌
+- **Complete Zero Vote Loss violation**: All data lost on crash
+- **No durability**: Process restart = all sessions, polls, votes lost
+- **Only acceptable for**: Development/testing, never production
+
+---
+
+### Trade-Offs
+
+#### Positive Consequences
+
+1. ✅ **Zero Vote Loss Guaranteed**: ACID durability, durable writes before acknowledgment
+2. ✅ **Domain Invariants Enforced**: Database constraints prevent violations (no application bugs)
+3. ✅ **Transactional Integrity**: Atomic operations for vote submission, poll activation
+4. ✅ **Query Flexibility**: SQL aggregations, JOINs for poll results (<100ms)
+5. ✅ **Operational Maturity**: Backup, restore, PITR, team expertise
+6. ✅ **Read Scalability**: Read replicas for 2000 concurrent queries
+7. ✅ **Schema Evolution**: Migration tools for backward compatibility
+
+#### Negative Consequences (with Mitigations)
+
+1. ⚠️ **Write Scalability Ceiling**: 10,000-50,000 writes/sec limit  
+   **Mitigation**: Current 100 votes/sec = 0.2-1% capacity, acceptable
+
+2. ⚠️ **Schema Rigidity**: Migrations required for changes  
+   **Mitigation**: Online schema change tools, zero-downtime
+
+3. ⚠️ **Horizontal Scaling Complexity**: Sharding difficult  
+   **Mitigation**: Read replicas handle queries, single master sufficient
+
+4. ⚠️ **Object-Relational Impedance**: Domain objects vs. tables  
+   **Mitigation**: ORM abstracts mapping, acceptable trade-off
+
+5. ⚠️ **Query Performance Requires Indexing**: Missing indexes = slow queries  
+   **Mitigation**: Index on query paths, monitor with query analysis
+
+6. ⚠️ **Single Point of Failure**: Master database failure  
+   **Mitigation**: HA configurations, RTO 10s with automated failover
+
+---
+
+### Monitoring Metrics
+
+**Transaction Metrics**:
+- Vote submission latency (target: <150ms p95)
+- Transaction rollback rate (target: <1%)
+- Deadlock rate (target: <0.1%)
+- Transaction throughput (votes/sec, activations/sec)
+
+**Constraint Violation Metrics**:
+- Unique constraint violations (indicates application bugs)
+- Foreign key violations (indicates data integrity issues)
+- Check constraint violations (indicates invalid state transitions)
+
+**Query Performance Metrics**:
+- Poll result aggregation latency (target: <100ms p95)
+- Session poll list query (target: <100ms p95)
+- Index hit ratio (target: >95%)
+- Full table scan count (target: 0 on hot paths)
+
+**Durability Metrics**:
+- Write-ahead log (WAL) flush latency
+- Replication lag (target: <1 second)
+- Checkpoint frequency
+- Connection pool utilization
+
+---
+
+### When to Revisit
+
+**Reconsideration Triggers**:
+1. **Write throughput exceeds 5,000 votes/sec sustained** (50× current capacity)
+2. **Complex querying abandoned** (only key-value lookups needed)
+3. **Schema changes too frequent** (weekly evolution required)
+4. **Global distribution required** (multi-region active-active)
+5. **Time-travel queries needed** (audit trail, historical reconstruction)
+
+**Future Options**: Sharding, NewSQL (CockroachDB, Spanner), Hybrid (RDBMS + Document DB), Event Sourcing
+
+---
+
+## ADR-001, ADR-002, ADR-003: Complete Architecture
+
+### Full Architecture Flow
+
+```
+┌─────────────────────────────────────────────────────────┐
+│              Client (Browser/Mobile)                     │
+│  - REST Commands (POST/PUT/DELETE)                      │
+│  - WebSocket Events (server push)                       │
+└─────────────────────────────────────────────────────────┘
+              │                           │
+              │ REST                      │ WebSocket
+              │ (Commands)                │ (Events)
+              ▼                           ▼
+┌─────────────────────────────────────────────────────────┐
+│                  API Layer (REST/WebSocket)              │
+│  - HTTP endpoints (commands, queries)                    │
+│  - WebSocket/SSE event streams                          │
+│  - Request validation, response formatting              │
+└─────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│                 Application Services                     │
+│  - Use case orchestration                               │
+│  - Cross-module workflows                               │
+└─────────────────────────────────────────────────────────┘
+                          │
+      ┌───────────────────┼───────────────────┐
+      ▼                   ▼                   ▼
+┌──────────┐      ┌──────────┐      ┌──────────┐
+│ Session  │      │   Poll   │      │   Vote   │
+│  Module  │      │  Module  │      │  Module  │
+│          │      │          │      │          │
+│ - Create │      │ - Create │      │ - Submit │
+│ - Start  │      │ - Activate│     │ - Validate│
+│ - Join   │      │ - Close  │      │ - Count  │
+└──────────┘      └──────────┘      └──────────┘
+      │                   │                   │
+      │   Domain Events   │                   │
+      │ (SessionStarted,  │                   │
+      │  PollActivated,   │                   │
+      │  VoteAccepted)    │                   │
+      └───────────────────┼───────────────────┘
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│            Event Bus (In-Process)                        │
+│  - Domain event publishing                              │
+│  - Event subscriptions (module-to-module)               │
+│  - WebSocket broadcast (to connected clients)           │
+│  - 24-hour event replay buffer                          │
+└─────────────────────────────────────────────────────────┘
+                          │
+                          │ Broadcast via WebSocket
+                          ▼
+                    (Back to clients)
+                          
+      ┌───────────────────┼───────────────────┐
+      ▼                   ▼                   ▼
+┌──────────┐      ┌──────────┐      ┌──────────┐
+│ Session  │      │   Poll   │      │   Vote   │
+│  Table   │      │  Table   │      │  Table   │
+│          │      │          │      │          │
+│ - PK     │      │ - PK     │      │ - PK     │
+│ - State  │      │ - FK     │      │ - FK     │
+│          │      │ - Active │      │ - Unique │
+└──────────┘      └──────────┘      └──────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│               Relational Database (RDBMS)                │
+│  - ACID transactions (Zero Vote Loss)                    │
+│  - Foreign keys (referential integrity)                  │
+│  - Unique constraints (one vote per poll)                │
+│  - Durable writes (WAL, replication)                     │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Architecture Decisions Summary**:
+1. **ADR-001 (Modular Monolith)**: Single deployable with clear module boundaries
+2. **ADR-002 (WebSocket + SSE)**: Real-time event delivery <100ms
+3. **ADR-003 (RDBMS)**: ACID transactions guarantee Zero Vote Loss
+
+---
+
 ## ADR-001 & ADR-002: Combined Architecture
 
 ### Communication Flow
@@ -491,31 +744,42 @@ This specification documents architectural decisions for the Live Event Polling 
 
 ## Next Steps
 
-With two architecture decisions documented:
+With three core architecture decisions documented:
 
 1. **Technology Selection** (Future ADR):
-   - Programming language (Python, Java, TypeScript, etc.)
-   - WebSocket library (Socket.IO, ws, uWebSockets, etc.)
-   - Framework (Spring Boot, Django, Express, etc.)
-   - Database (PostgreSQL, MySQL, etc.)
+   - Programming language (Python, Java, TypeScript, C#, etc.)
+   - WebSocket library (Socket.IO, ws, uWebSockets, SignalR, etc.)
+   - Framework (Spring Boot, Django, Express, ASP.NET Core, etc.)
+   - **Database product** (PostgreSQL, MySQL, SQL Server, etc.)
+   - **ORM selection** (SQLAlchemy, Hibernate, Entity Framework, Prisma, etc.)
 
-2. **Module Implementation Planning**:
-   - Folder structure
+2. **Database Schema Design**:
+   - Table structures (Session, Poll, Vote, Participant, Option)
+   - Primary keys, foreign keys, unique constraints
+   - Indexes for query optimization
+   - Check constraints for state validation
+   - Migration strategy (online schema changes)
+
+3. **Module Implementation Planning**:
+   - Folder structure (modules, services, repositories)
    - Module APIs and interfaces
    - Dependency injection patterns
    - WebSocket connection management
+   - Transaction boundaries (aggregate boundaries)
 
-3. **Infrastructure Planning**:
+4. **Infrastructure Planning**:
    - Load balancer configuration (sticky sessions for WebSocket)
-   - Containerization (Docker)
-   - Orchestration (Kubernetes, Docker Compose)
-   - Event buffer storage (24-hour replay)
+   - Database HA configuration (master-replica, automated failover)
+   - Connection pooling settings
+   - Backup and recovery procedures
+   - Monitoring and alerting setup
 
-4. **Database Design**:
-   - Schema design (tables, relationships)
-   - Event storage table (event replay buffer)
-   - Migration strategy
+5. **Event Buffer Implementation**:
+   - Event storage table schema
+   - 24-hour retention policy
+   - Event replay logic
+   - Event serialization format
 
 ---
 
-**Architecture decisions are ready to guide implementation planning.**
+**Architecture foundation complete. Ready for technology selection and detailed design.**
