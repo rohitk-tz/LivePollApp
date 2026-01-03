@@ -9,17 +9,24 @@
 
 ## Quick Links
 
-- **[ADR-001: System Architecture Style](architecture/adr/adr-001-system-architecture-style.md)** - Main decision document
+### Architecture Decision Records
+
+- **[ADR-001: System Architecture Style](architecture/adr/adr-001-system-architecture-style.md)** - Modular Monolith decision
+- **[ADR-002: Real-Time Communication](architecture/adr/adr-002-realtime-communication.md)** - WebSocket + SSE decision
+
+### Supporting Documentation
+
 - **[Feature Specification](spec.md)** - User stories, requirements, success criteria
-- **[Validation Report](validation-report.md)** - Constitution alignment and requirement verification
+- **[Validation Report ADR-001](validation-report.md)** - System architecture validation
+- **[Validation Report ADR-002](validation-adr-002.md)** - Real-time communication validation
 
 ---
 
 ## What's Included
 
-This specification documents the architectural decision to implement the Live Event Polling Application as a **Modular Monolith**, including:
+This specification documents architectural decisions for the Live Event Polling Application:
 
-### Architecture Decision Record (ADR-001)
+### ADR-001: System Architecture Style
 
 **Decision**: The system will be implemented as a Modular Monolith
 
@@ -31,9 +38,23 @@ This specification documents the architectural decision to implement the Live Ev
 - **Strong consistency** via local ACID transactions (Zero Vote Loss)
 - **Future migration path** to microservices if needed
 
+### ADR-002: Real-Time Communication Mechanism
+
+**Decision**: WebSocket as primary protocol with Server-Sent Events (SSE) as fallback
+
+**Key Points**:
+- **WebSocket primary**: Low latency (<50ms typical), bidirectional, 95%+ browser support
+- **SSE fallback**: Ensures compatibility in restrictive network environments
+- **Event replay**: 24-hour buffer for zero data loss on reconnect
+- **Heartbeat mechanism**: 30-second ping/pong keeps connections alive
+- **Connection scoping**: Session-based subscriptions via query parameters
+- **Load balancer support**: Sticky sessions for WebSocket persistence
+
 ---
 
-## Decision Context
+## ADR-001: System Architecture Style
+
+### Decision Context
 
 ### Constitution Principles Supported
 
@@ -274,16 +295,227 @@ This specification documents the architectural decision to implement the Live Ev
 
 ---
 
-## Next Steps
+## ADR-002: Real-Time Communication Mechanism
 
-With the architecture decision documented:
+### Decision Context
 
-1. **Technology Selection** - Choose language, framework, database (future spec/ADR)
-2. **Module Implementation Planning** - Define folder structure, module APIs
-3. **Infrastructure Planning** - Deployment strategy, container orchestration
-4. **Database Design** - Schema design, migration strategy
-5. **Development Workflow** - Branching strategy, CI/CD pipeline
+**Real-Time First Principle**: All participant actions must be reflected system-wide in near real-time without manual refresh.
+
+**Performance Requirements**:
+- Event delivery latency: < 100ms (p95)
+- Concurrent connections: 2000+ simultaneous
+- Event throughput: 150 events/second peak
+- Connection duration: 2+ hours
+
+**Reliability Requirements**:
+- Event replay: 24-hour buffer
+- Zero event loss on reconnect
+- Causal ordering within session
 
 ---
 
-**Architecture decision is ready to guide implementation planning.**
+### Why WebSocket + SSE?
+
+**WebSocket Primary**:
+- ✅ **Lowest latency**: <50ms typical event delivery
+- ✅ **Bidirectional**: Enables future features (heartbeat, presence)
+- ✅ **Efficient**: 85-90% bandwidth reduction vs. polling
+- ✅ **Browser support**: All modern browsers natively
+
+**SSE Fallback**:
+- ✅ **Compatibility**: Works through restrictive firewalls/proxies
+- ✅ **Standard HTTP**: Better firewall traversal than WebSocket
+- ✅ **Automatic reconnection**: Browser handles reconnection
+
+---
+
+### Alternatives Rejected
+
+**1. HTTP Long Polling** ❌
+- Latency: 500ms-2s vs. <100ms requirement
+- Resource waste: 2000 threads for 2000 clients
+- Bandwidth: 800KB-1.6MB/sec header overhead
+
+**2. SSE Only** ❌
+- Unidirectional: Limits future features
+- HTTP/1.1 connection limits: 6 per domain
+- Accepted as fallback but not primary
+
+**3. HTTP/2 Server Push** ❌
+- No browser API for event consumption
+- Not designed for real-time event streaming
+
+**4. gRPC Streaming** ❌
+- Browser limitations: Requires gRPC-Web proxy
+- Complexity: Protocol Buffers overkill for JSON events
+
+**5. WebRTC Data Channels** ❌
+- Connection setup: 2-5 seconds vs. <100ms requirement
+- Peer-to-peer model mismatch for client-server
+
+---
+
+### Trade-Offs
+
+#### Positive Consequences
+
+1. ✅ **Low latency**: <50ms typical, easily meets <100ms target
+2. ✅ **Bidirectional**: Future-proof for new features
+3. ✅ **Resource efficient**: 85-90% bandwidth reduction vs. polling
+4. ✅ **Browser support**: 99.9%+ with fallback
+5. ✅ **Event replay**: Zero loss on reconnect
+6. ✅ **Load balancer compatible**: Sticky sessions supported
+7. ✅ **Debuggable**: Browser DevTools, JSON human-readable
+
+#### Negative Consequences (with Mitigations)
+
+1. ⚠️ **Stateful connections**: 50KB per connection = 100MB for 2000  
+   **Mitigation**: Acceptable on 2GB+ instances
+
+2. ⚠️ **Sticky sessions required**: Load balancer configuration  
+   **Mitigation**: All modern load balancers support
+
+3. ⚠️ **Connection timeouts**: Idle proxies close connections  
+   **Mitigation**: 30-second heartbeat ping/pong
+
+4. ⚠️ **Firewall challenges**: Corporate restrictions  
+   **Mitigation**: SSE fallback for 99% coverage
+
+5. ⚠️ **Mobile resilience**: Frequent network switches  
+   **Mitigation**: Auto-reconnect + event replay
+
+6. ⚠️ **Testing complexity**: Stateful asynchronous tests  
+   **Mitigation**: WebSocket testing libraries available
+
+---
+
+### Monitoring Metrics
+
+**Connection Metrics**:
+- Active WebSocket connections (total, per instance)
+- Connection duration histogram
+- Reconnection rate
+- Upgrade success rate
+
+**Performance Metrics**:
+- Event delivery latency (target: <100ms p95)
+- Broadcast fanout time (target: <100ms p95 for 500 clients)
+- Message throughput (target: 150 msg/sec)
+
+**Reliability Metrics**:
+- Event loss rate (target: 0%)
+- Reconnection success rate (target: >99%)
+- Reconnection time (target: <5 seconds p95)
+
+---
+
+### When to Revisit
+
+**Reconsideration Triggers**:
+1. WebSocket deprecated by browsers (unlikely)
+2. Connection scale exceeds 5,000 per instance
+3. Binary protocol needed (JSON bottleneck)
+4. Strong bidirectional requirements (commands via WebSocket)
+5. Edge computing deployment (geographic distribution)
+
+**Future Options**: WebTransport over HTTP/3, GraphQL Subscriptions
+
+---
+
+## ADR-001 & ADR-002: Combined Architecture
+
+### Communication Flow
+
+```
+┌─────────────────────────────────────────────────────────┐
+│              Client (Browser/Mobile)                     │
+│  - REST Commands (POST/PUT/DELETE)                      │
+│  - WebSocket Events (server push)                       │
+└─────────────────────────────────────────────────────────┘
+              │                           │
+              │ REST                      │ WebSocket
+              │ (Commands)                │ (Events)
+              ▼                           ▼
+┌─────────────────────────────────────────────────────────┐
+│                  API Layer (REST/WebSocket)              │
+│  - HTTP endpoints (commands, queries)                    │
+│  - WebSocket/SSE event streams                          │
+│  - Request validation, response formatting              │
+└─────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│                 Application Services                     │
+│  - Use case orchestration                               │
+│  - Cross-module workflows                               │
+└─────────────────────────────────────────────────────────┘
+                          │
+      ┌───────────────────┼───────────────────┐
+      ▼                   ▼                   ▼
+┌──────────┐      ┌──────────┐      ┌──────────┐
+│ Session  │      │   Poll   │      │   Vote   │
+│  Module  │      │  Module  │      │  Module  │
+│          │      │          │      │          │
+│ - Create │      │ - Create │      │ - Submit │
+│ - Start  │      │ - Activate│     │ - Validate│
+│ - Join   │      │ - Close  │      │ - Count  │
+└──────────┘      └──────────┘      └──────────┘
+      │                   │                   │
+      │   Domain Events   │                   │
+      │ (SessionStarted,  │                   │
+      │  PollActivated,   │                   │
+      │  VoteAccepted)    │                   │
+      └───────────────────┼───────────────────┘
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│            Event Bus (In-Process)                        │
+│  - Domain event publishing                              │
+│  - Event subscriptions (module-to-module)               │
+│  - WebSocket broadcast (to connected clients)           │
+│  - 24-hour event replay buffer                          │
+└─────────────────────────────────────────────────────────┘
+                          │
+                          │ Broadcast via WebSocket
+                          ▼
+                    (Back to clients)
+```
+
+**Key Insights**:
+- **Commands flow down**: Client → REST → Application Services → Modules
+- **Events flow up**: Modules → Event Bus → WebSocket → Clients
+- **Separation of concerns**: REST for commands, WebSocket for events
+- **In-process efficiency**: Module-to-module via event bus (microseconds)
+- **External real-time**: WebSocket to clients (<100ms)
+
+---
+
+## Next Steps
+
+With two architecture decisions documented:
+
+1. **Technology Selection** (Future ADR):
+   - Programming language (Python, Java, TypeScript, etc.)
+   - WebSocket library (Socket.IO, ws, uWebSockets, etc.)
+   - Framework (Spring Boot, Django, Express, etc.)
+   - Database (PostgreSQL, MySQL, etc.)
+
+2. **Module Implementation Planning**:
+   - Folder structure
+   - Module APIs and interfaces
+   - Dependency injection patterns
+   - WebSocket connection management
+
+3. **Infrastructure Planning**:
+   - Load balancer configuration (sticky sessions for WebSocket)
+   - Containerization (Docker)
+   - Orchestration (Kubernetes, Docker Compose)
+   - Event buffer storage (24-hour replay)
+
+4. **Database Design**:
+   - Schema design (tables, relationships)
+   - Event storage table (event replay buffer)
+   - Migration strategy
+
+---
+
+**Architecture decisions are ready to guide implementation planning.**
