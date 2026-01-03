@@ -1,6 +1,6 @@
 # Feature Specification: Backend Module Boundaries
 
-**Feature Branch**: `001-module-boundaries`  
+**Feature Branch**: `008-module-boundaries`  
 **Created**: January 3, 2026  
 **Status**: Draft  
 **Input**: Define logical backend module boundaries for the Live Event Polling Application implemented as a Modular Monolith
