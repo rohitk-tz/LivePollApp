@@ -35,7 +35,7 @@ export class VoteValidator {
       throw new InvalidVoteError(`Poll ${pollId} does not exist`);
     }
 
-    if (poll.closedAt !== null) {
+    if (poll.status !== 'Active') {
       throw new PollNotActiveError(pollId);
     }
   }

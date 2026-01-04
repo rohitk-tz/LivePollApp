@@ -21,11 +21,11 @@ export function createSessionRoutes(controller: SessionController): Router {
   // GET /sessions/code/:code - Get session by code
   router.get('/code/:code', validateSessionCode, controller.getSessionByCode);
 
-  // PATCH /sessions/:id/start - Start session
-  router.patch('/:id/start', validateSessionId, controller.startSession);
+  // POST /sessions/:id/start - Start session
+  router.post('/:id/start', validateSessionId, controller.startSession);
 
-  // PATCH /sessions/:id/end - End session
-  router.patch('/:id/end', validateSessionId, controller.endSession);
+  // POST /sessions/:id/end - End session
+  router.post('/:id/end', validateSessionId, controller.endSession);
 
   return router;
 }

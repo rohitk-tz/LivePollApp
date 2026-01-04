@@ -1,16 +1,19 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { participantApi } from '../services/api';
 import { isApiError, ApiErrorCode } from '../services/errors';
 import { Layout } from '../components/Layout';
 import { Loading } from '../components/Loading';
 
 export default function ParticipantJoinPage() {
-  const [sessionCode, setSessionCode] = useState('');
+  const navigate = useNavigate();
+  const location = useLocation();
+  const prefilledSessionCode = (location.state as any)?.sessionCode || '';
+  
+  const [sessionCode, setSessionCode] = useState(prefilledSessionCode);
   const [displayName, setDisplayName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const navigate = useNavigate();
 
   const validateSessionCode = (code: string): boolean => {
     const trimmed = code.trim();
@@ -114,8 +117,21 @@ export default function ParticipantJoinPage() {
                 </svg>
               </div>
               <h1 className="text-3xl font-bold text-gray-900 mb-2">Join Live Session</h1>
-              <p className="text-gray-600">Enter your session code to participate in the poll</p>
+              <p className="text-gray-600">
+                {prefilledSessionCode 
+                  ? 'Please enter your name to join the session' 
+                  : 'Enter your session code to participate in the poll'}
+              </p>
             </div>
+
+            {/* Info message for direct link access */}
+            {prefilledSessionCode && (
+              <div className="mb-6 bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg">
+                <p className="text-sm font-medium">
+                  📋 Session code <strong>{prefilledSessionCode}</strong> detected. Enter your name below to join!
+                </p>
+              </div>
+            )}
 
             {/* Form */}
             <form onSubmit={handleJoinSession} className="space-y-6">

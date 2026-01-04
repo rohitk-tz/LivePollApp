@@ -198,23 +198,44 @@ export default function PollManagementList({
               </div>
             </div>
 
-            {/* Poll Options */}
+            {/* Poll Options with Visual Results */}
             <div className="space-y-2 mb-4">
-              {poll.options.map((option, index) => (
-                <div key={option.id} className="flex items-center justify-between text-sm">
-                  <div className="flex items-center">
-                    <span className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-white text-gray-700 font-semibold text-xs mr-2">
-                      {String.fromCharCode(65 + index)}
-                    </span>
-                    <span className="text-gray-700">{option.optionText}</span>
+              {poll.options.map((option, index) => {
+                const totalVotes = getTotalVotes(poll);
+                const percentage = totalVotes > 0 && option.voteCount 
+                  ? ((option.voteCount / totalVotes) * 100).toFixed(0)
+                  : 0;
+                const showResults = poll.isActive || poll.closedAt;
+
+                return (
+                  <div key={option.id} className="space-y-1">
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center flex-1">
+                        <span className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-white text-gray-700 font-semibold text-xs mr-2">
+                          {String.fromCharCode(65 + index)}
+                        </span>
+                        <span className="text-gray-700 flex-1">{option.optionText}</span>
+                      </div>
+                      {showResults && (
+                        <span className="text-gray-500 font-medium ml-2">
+                          {option.voteCount || 0} {option.voteCount === 1 ? 'vote' : 'votes'} ({percentage}%)
+                        </span>
+                      )}
+                    </div>
+                    {/* Visual progress bar for active/closed polls */}
+                    {showResults && (
+                      <div className="w-full bg-gray-200 rounded-full h-2 ml-8">
+                        <div
+                          className={`h-2 rounded-full transition-all duration-300 ${
+                            poll.isActive ? 'bg-green-500' : 'bg-blue-500'
+                          }`}
+                          style={{ width: `${percentage}%` }}
+                        />
+                      </div>
+                    )}
                   </div>
-                  {option.voteCount !== undefined && (
-                    <span className="text-gray-500 font-medium">
-                      {option.voteCount} {option.voteCount === 1 ? 'vote' : 'votes'}
-                    </span>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Action Buttons */}

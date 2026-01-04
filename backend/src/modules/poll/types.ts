@@ -7,6 +7,12 @@ export enum PollType {
   OPEN_TEXT = 'OPEN_TEXT'
 }
 
+export enum PollStatus {
+  Draft = 'Draft',
+  Active = 'Active',
+  Closed = 'Closed'
+}
+
 export interface PollOption {
   id: string;
   pollId: string;
@@ -19,6 +25,7 @@ export interface Poll {
   sessionId: string;
   question: string;
   pollType: PollType;
+  status: PollStatus;
   allowMultiple: boolean;
   isAnonymous: boolean;
   minRating: number | null;

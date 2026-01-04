@@ -80,6 +80,9 @@ export default function PollCreationForm({ sessionId, onPollCreated, onError }: 
       const filledOptions = options.filter(opt => opt.text.trim());
       const request: CreatePollRequest = {
         question: question.trim(),
+        pollType: 'MULTIPLE_CHOICE',
+        allowMultiple: false,
+        isAnonymous: false,
         options: filledOptions.map((opt, index) => ({
           text: opt.text.trim(),
           order: index + 1,

@@ -21,11 +21,18 @@ export default function ParticipantPollViewPage() {
   const [wsConnected, setWsConnected] = useState(false);
 
   const participantId = localStorage.getItem('participantId');
+  const displayName = localStorage.getItem('participantName');
 
   // Load session and polls
   useEffect(() => {
-    if (!sessionCode || !participantId) {
+    if (!sessionCode) {
       navigate('/');
+      return;
+    }
+
+    // If no participantId, redirect to join page with session code pre-filled
+    if (!participantId) {
+      navigate('/', { state: { sessionCode } });
       return;
     }
 

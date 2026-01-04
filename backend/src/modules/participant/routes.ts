@@ -11,6 +11,7 @@ export function createParticipantRoutes(prisma: PrismaClient): Router {
 
   // Join session - register new participant
   router.post('/sessions/:id/join', controller.joinSession);
+  router.post('/sessions/:id/participants', controller.joinSession); // Alternative endpoint
 
   // Get participant by ID
   router.get('/participants/:id', controller.getParticipant);

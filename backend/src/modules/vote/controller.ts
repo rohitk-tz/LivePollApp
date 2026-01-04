@@ -15,7 +15,7 @@ export class VoteController {
   submitVote = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const pollId = req.params.id;
-      const { participantId, optionId, ratingValue, textResponse } = req.body;
+      const { participantId, optionId, selectedOptionId, ratingValue, textResponse } = req.body;
 
       // Validate required field
       if (!participantId) {
@@ -26,10 +26,24 @@ export class VoteController {
         return;
       }
 
+      // Support both optionId and selectedOptionId for compatibility
+      const finalOptionId = optionId || selectedOptionId;
+
+      // Log for debugging
+      console.log('[Vote] Submitting vote:', {
+        pollId,
+        participantId,
+        finalOptionId,
+        hasOptionId: !!optionId,
+        hasSelectedOptionId: !!selectedOptionId,
+        ratingValue,
+        textResponse
+      });
+
       const result = await this.service.submitVote({
         pollId,
         participantId,
-        optionId,
+        optionId: finalOptionId,
         ratingValue,
         textResponse
       });
@@ -37,8 +51,12 @@ export class VoteController {
       // Check if vote was rejected
       if ('vote' in result) {
         res.status(201).json({
-          vote: result.vote,
-          event: result.event
+          voteId: result.vote.id,
+          pollId: result.vote.pollId,
+          participantId: result.vote.participantId,
+          selectedOptionId: result.vote.optionId,
+          status: 'Accepted',
+          submittedAt: result.vote.submittedAt.toISOString()
         });
       } else {
         res.status(400).json({

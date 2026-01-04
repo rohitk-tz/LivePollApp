@@ -4,11 +4,38 @@
 import { Request, Response, NextFunction } from 'express';
 import { PollService } from './service.js';
 import {
+  Poll,
   PollType,
+  PollStatus,
   PollNotFoundError,
   PollValidationError,
   ActivePollExistsError
 } from './types.js';
+
+// Map poll to frontend format with isActive field and vote counts
+async function toFrontendPollWithVotes(poll: Poll, service: PollService) {
+  // Get vote counts for active or closed polls
+  const voteCounts = (poll.status === PollStatus.Active || poll.status === PollStatus.Closed)
+    ? await service['repository'].getVoteCounts(poll.id)
+    : new Map<string, number>();
+
+  return {
+    ...poll,
+    isActive: poll.status === PollStatus.Active,
+    options: poll.options?.map(opt => ({
+      ...opt,
+      voteCount: voteCounts.get(opt.id) || 0
+    }))
+  };
+}
+
+// Map poll to frontend format with isActive field (without vote counts)
+function toFrontendPoll(poll: Poll) {
+  return {
+    ...poll,
+    isActive: poll.status === PollStatus.Active
+  };
+}
 
 export class PollController {
   constructor(private service: PollService) {}
@@ -60,7 +87,7 @@ export class PollController {
       });
 
       res.status(201).json({
-        poll: result.poll,
+        poll: toFrontendPoll(result.poll),
         event: result.event
       });
     } catch (error) {
@@ -85,7 +112,7 @@ export class PollController {
       const result = await this.service.activatePoll(pollId);
 
       res.status(200).json({
-        poll: result.poll,
+        poll: toFrontendPoll(result.poll),
         event: result.event
       });
     } catch (error) {
@@ -124,7 +151,7 @@ export class PollController {
       const result = await this.service.closePoll(pollId);
 
       res.status(200).json({
-        poll: result.poll,
+        poll: toFrontendPoll(result.poll),
         event: result.event
       });
     } catch (error) {
@@ -154,8 +181,9 @@ export class PollController {
     try {
       const pollId = req.params.id;
       const poll = await this.service.getPoll(pollId);
+      const pollWithVotes = await toFrontendPollWithVotes(poll, this.service);
 
-      res.status(200).json(poll);
+      res.status(200).json(pollWithVotes);
     } catch (error) {
       if (error instanceof PollNotFoundError) {
         res.status(404).json({
@@ -199,8 +227,13 @@ export class PollController {
       const sessionId = req.params.id;
       const polls = await this.service.getSessionPolls(sessionId);
 
+      // Map polls with vote counts
+      const pollsWithVotes = await Promise.all(
+        polls.map(poll => toFrontendPollWithVotes(poll, this.service))
+      );
+
       res.status(200).json({
-        polls,
+        polls: pollsWithVotes,
         count: polls.length,
         sessionId
       });
@@ -226,7 +259,8 @@ export class PollController {
         return;
       }
 
-      res.status(200).json(poll);
+      const pollWithVotes = await toFrontendPollWithVotes(poll, this.service);
+      res.status(200).json(pollWithVotes);
     } catch (error) {
       next(error);
     }

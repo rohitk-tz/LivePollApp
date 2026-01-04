@@ -110,14 +110,10 @@ export class PollService {
     // Validate poll can be activated
     await this.validator.validateCanActivate(pollId);
 
-    // Get poll with options
-    const poll = await this.repository.findById(pollId, true);
-    
-    if (!poll) {
-      throw new PollNotFoundError(pollId);
-    }
-
     const activatedAt = new Date();
+
+    // Update poll status to Active
+    const poll = await this.repository.activate(pollId);
 
     const event: PollActivatedEvent = {
       pollId: poll.id,

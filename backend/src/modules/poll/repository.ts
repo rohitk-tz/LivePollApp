@@ -5,9 +5,10 @@ import {
   PrismaClient,
   Poll as PrismaPoll,
   PollOption as PrismaPollOption,
-  PollType as PrismaPollType
+  PollType as PrismaPollType,
+  PollStatus as PrismaPollStatus
 } from '@prisma/client';
-import { Poll, PollOption, PollType } from './types.js';
+import { Poll, PollOption, PollType, PollStatus } from './types.js';
 
 export class PollRepository {
   constructor(private prisma: PrismaClient) {}
@@ -21,6 +22,7 @@ export class PollRepository {
       sessionId: prismaPoll.sessionId,
       question: prismaPoll.question,
       pollType: prismaPoll.pollType as PollType,
+      status: prismaPoll.status as PollStatus,
       allowMultiple: prismaPoll.allowMultiple,
       isAnonymous: prismaPoll.isAnonymous,
       minRating: prismaPoll.minRating,
@@ -126,7 +128,7 @@ export class PollRepository {
     const count = await this.prisma.poll.count({
       where: {
         sessionId,
-        closedAt: null
+        status: 'Active' as PrismaPollStatus
       }
     });
     return count > 0;
@@ -136,7 +138,7 @@ export class PollRepository {
     const poll = await this.prisma.poll.findFirst({
       where: {
         sessionId,
-        closedAt: null
+        status: 'Active' as PrismaPollStatus
       },
       include: {
         options: { orderBy: { sequenceOrder: 'asc' } }
@@ -148,7 +150,23 @@ export class PollRepository {
   async close(id: string, closedAt: Date): Promise<Poll> {
     const poll = await this.prisma.poll.update({
       where: { id },
-      data: { closedAt },
+      data: { 
+        closedAt,
+        status: 'Closed' as PrismaPollStatus
+      },
+      include: {
+        options: { orderBy: { sequenceOrder: 'asc' } }
+      }
+    });
+    return this.toDomain(poll);
+  }
+
+  async activate(id: string): Promise<Poll> {
+    const poll = await this.prisma.poll.update({
+      where: { id },
+      data: { 
+        status: 'Active' as PrismaPollStatus
+      },
       include: {
         options: { orderBy: { sequenceOrder: 'asc' } }
       }

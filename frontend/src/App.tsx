@@ -3,12 +3,14 @@ import ParticipantJoinPage from './pages/ParticipantJoinPage';
 import ParticipantPollViewPage from './pages/ParticipantPollViewPage';
 import ParticipantPollDisplayPage from './pages/ParticipantPollDisplayPage';
 import PresenterDashboard from './pages/PresenterDashboard';
+import SessionCreationPage from './pages/SessionCreationPage';
 
 function App() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Routes>
         <Route path="/" element={<ParticipantJoinPage />} />
+        <Route path="/create" element={<SessionCreationPage />} />
         <Route path="/session/:sessionCode" element={<ParticipantPollViewPage />} />
         <Route path="/display/:sessionCode" element={<ParticipantPollDisplayPage />} />
         <Route path="/presenter/:sessionCode" element={<PresenterDashboard />} />

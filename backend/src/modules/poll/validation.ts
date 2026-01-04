@@ -101,7 +101,7 @@ export class PollValidator {
     const activePoll = await this.prisma.poll.findFirst({
       where: {
         sessionId,
-        closedAt: null
+        status: 'Active'
       }
     });
 
@@ -126,7 +126,7 @@ export class PollValidator {
       throw new PollValidationError(`Poll ${pollId} does not exist`);
     }
 
-    if (poll.closedAt !== null) {
+    if (poll.status === 'Closed') {
       throw new PollValidationError('Cannot activate a closed poll');
     }
 
@@ -159,8 +159,8 @@ export class PollValidator {
       throw new PollValidationError(`Poll ${pollId} does not exist`);
     }
 
-    if (poll.closedAt !== null) {
-      throw new PollValidationError('Poll is already closed');
+    if (poll.status !== 'Active') {
+      throw new PollValidationError('Poll is not active');
     }
   }
 }

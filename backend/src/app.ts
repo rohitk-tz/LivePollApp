@@ -2,6 +2,7 @@
 // Configures Express with middleware and routes
 
 import express, { Express } from 'express';
+import cors from 'cors';
 import { PrismaClient } from '@prisma/client';
 import {
   SessionRepository,
@@ -16,6 +17,19 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 
 export function createApp(prisma: PrismaClient): Express {
   const app = express();
+
+  // CORS middleware - must be before other middleware
+  app.use(cors({
+    origin: [
+      'http://localhost:5173',
+      'http://localhost:3000',
+      'http://127.0.0.1:5173',
+      'http://127.0.0.1:3000'
+    ],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+  }));
 
   // Middleware
   app.use(express.json());

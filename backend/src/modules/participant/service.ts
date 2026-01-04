@@ -119,4 +119,16 @@ export class ParticipantService {
       )
     );
   }
+
+  /**
+   * Update participant's last seen timestamp
+   * Called on heartbeat to track participant activity
+   */
+  async updateLastSeen(participantId: string): Promise<void> {
+    // Verify participant exists
+    await this.getParticipant(participantId);
+    
+    // Update last_seen_at
+    await this.repository.updateLastSeen(participantId);
+  }
 }

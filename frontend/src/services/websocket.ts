@@ -39,6 +39,7 @@ class WebSocketService {
   private socket: Socket | null = null;
   private connected = false;
   private callbacks: WebSocketCallbacks = {};
+  private eventListeners: Map<string, Set<Function>> = new Map();
 
   /**
    * Connect to WebSocket server with connection options
@@ -113,6 +114,26 @@ class WebSocketService {
       this.socket.on('connection:established', (data: ConnectionEstablishedEvent) => {
         console.log('Connection established:', data);
       });
+
+      // Listen to generic 'event' and route based on eventType
+      this.socket.on('event', (wrappedEvent: any) => {
+        const { eventType, payload } = wrappedEvent;
+        console.log(`[WebSocket] Received event: ${eventType}`, payload);
+        
+        // Call all registered listeners for this event type
+        if (eventType && payload) {
+          const listeners = this.eventListeners.get(eventType);
+          if (listeners) {
+            listeners.forEach(callback => {
+              try {
+                callback(payload);
+              } catch (error) {
+                console.error(`Error in ${eventType} listener:`, error);
+              }
+            });
+          }
+        }
+      });
     });
   }
 
@@ -122,10 +143,30 @@ class WebSocketService {
       this.socket = null;
       this.connected = false;
     }
+    // Clear all event listeners
+    this.eventListeners.clear();
   }
 
   isConnected(): boolean {
     return this.connected;
+  }
+
+  // Helper methods for event listener management
+  private registerListener(eventType: string, callback: Function): void {
+    if (!this.eventListeners.has(eventType)) {
+      this.eventListeners.set(eventType, new Set());
+    }
+    this.eventListeners.get(eventType)!.add(callback);
+  }
+
+  private unregisterListener(eventType: string, callback: Function): void {
+    const listeners = this.eventListeners.get(eventType);
+    if (listeners) {
+      listeners.delete(callback);
+      if (listeners.size === 0) {
+        this.eventListeners.delete(eventType);
+      }
+    }
   }
 
   // Join session room
@@ -149,172 +190,124 @@ class WebSocketService {
 
   // Event listeners
   onSessionStarted(callback: (data: SessionStartedEvent) => void): void {
-    if (this.socket) {
-      this.socket.on('session:started', callback);
-    }
+    this.registerListener('session:started', callback);
   }
 
   onSessionEnded(callback: (data: SessionEndedEvent) => void): void {
-    if (this.socket) {
-      this.socket.on('session:ended', callback);
-    }
+    this.registerListener('session:ended', callback);
   }
 
   onSessionPaused(callback: (data: SessionPausedEvent) => void): void {
-    if (this.socket) {
-      this.socket.on('session:paused', callback);
-    }
+    this.registerListener('session:paused', callback);
   }
 
   onSessionResumed(callback: (data: SessionResumedEvent) => void): void {
-    if (this.socket) {
-      this.socket.on('session:resumed', callback);
-    }
+    this.registerListener('session:resumed', callback);
   }
 
   onPollCreated(callback: (data: PollCreatedEvent) => void): void {
-    if (this.socket) {
-      this.socket.on('poll:created', callback);
-    }
+    this.registerListener('poll:created', callback);
   }
 
   onPollActivated(callback: (data: PollActivatedEvent) => void): void {
-    if (this.socket) {
-      this.socket.on('poll:activated', callback);
-    }
+    this.registerListener('poll:activated', callback);
   }
 
   onPollClosed(callback: (data: PollClosedEvent) => void): void {
-    if (this.socket) {
-      this.socket.on('poll:closed', callback);
-    }
+    this.registerListener('poll:closed', callback);
   }
 
   onPollDraftUpdated(callback: (data: PollDraftUpdatedEvent) => void): void {
-    if (this.socket) {
-      this.socket.on('poll:draft_updated', callback);
-    }
+    this.registerListener('poll:draft_updated', callback);
   }
 
   onVoteAccepted(callback: (data: VoteAcceptedEvent) => void): void {
-    if (this.socket) {
-      this.socket.on('vote:accepted', callback);
-    }
+    this.registerListener('vote:accepted', callback);
   }
 
   onVoteRejected(callback: (data: VoteRejectedEvent) => void): void {
-    if (this.socket) {
-      this.socket.on('vote:rejected', callback);
-    }
+    this.registerListener('vote:rejected', callback);
+  }
+
+  onResultsUpdated(callback: (data: any) => void): void {
+    this.registerListener('results:updated', callback);
   }
 
   onParticipantJoined(callback: (data: ParticipantJoinedEvent) => void): void {
-    if (this.socket) {
-      this.socket.on('participant:joined', callback);
-    }
+    this.registerListener('participant:joined', callback);
   }
 
   onParticipantReconnected(callback: (data: ParticipantReconnectedEvent) => void): void {
-    if (this.socket) {
-      this.socket.on('participant:reconnected', callback);
-    }
+    this.registerListener('participant:reconnected', callback);
   }
 
   onParticipantLeft(callback: (data: ParticipantLeftEvent) => void): void {
-    if (this.socket) {
-      this.socket.on('participant:left', callback);
-    }
+    this.registerListener('participant:left', callback);
   }
 
   onError(callback: (data: ErrorGeneralEvent) => void): void {
-    if (this.socket) {
-      this.socket.on('error:general', callback);
-    }
+    this.registerListener('error:general', callback);
   }
 
   // Remove event listeners
   offSessionStarted(callback: (data: SessionStartedEvent) => void): void {
-    if (this.socket) {
-      this.socket.off('session:started', callback);
-    }
+    this.unregisterListener('session:started', callback);
   }
 
   offSessionEnded(callback: (data: SessionEndedEvent) => void): void {
-    if (this.socket) {
-      this.socket.off('session:ended', callback);
-    }
+    this.unregisterListener('session:ended', callback);
   }
 
   offSessionPaused(callback: (data: SessionPausedEvent) => void): void {
-    if (this.socket) {
-      this.socket.off('session:paused', callback);
-    }
+    this.unregisterListener('session:paused', callback);
   }
 
   offSessionResumed(callback: (data: SessionResumedEvent) => void): void {
-    if (this.socket) {
-      this.socket.off('session:resumed', callback);
-    }
+    this.unregisterListener('session:resumed', callback);
   }
 
   offPollCreated(callback: (data: PollCreatedEvent) => void): void {
-    if (this.socket) {
-      this.socket.off('poll:created', callback);
-    }
+    this.unregisterListener('poll:created', callback);
   }
 
   offPollActivated(callback: (data: PollActivatedEvent) => void): void {
-    if (this.socket) {
-      this.socket.off('poll:activated', callback);
-    }
+    this.unregisterListener('poll:activated', callback);
   }
 
   offPollClosed(callback: (data: PollClosedEvent) => void): void {
-    if (this.socket) {
-      this.socket.off('poll:closed', callback);
-    }
+    this.unregisterListener('poll:closed', callback);
   }
 
   offPollDraftUpdated(callback: (data: PollDraftUpdatedEvent) => void): void {
-    if (this.socket) {
-      this.socket.off('poll:draft_updated', callback);
-    }
+    this.unregisterListener('poll:draft_updated', callback);
   }
 
   offVoteAccepted(callback: (data: VoteAcceptedEvent) => void): void {
-    if (this.socket) {
-      this.socket.off('vote:accepted', callback);
-    }
+    this.unregisterListener('vote:accepted', callback);
   }
 
   offVoteRejected(callback: (data: VoteRejectedEvent) => void): void {
-    if (this.socket) {
-      this.socket.off('vote:rejected', callback);
-    }
+    this.unregisterListener('vote:rejected', callback);
+  }
+
+  offResultsUpdated(callback: (data: any) => void): void {
+    this.unregisterListener('results:updated', callback);
   }
 
   offParticipantJoined(callback: (data: ParticipantJoinedEvent) => void): void {
-    if (this.socket) {
-      this.socket.off('participant:joined', callback);
-    }
+    this.unregisterListener('participant:joined', callback);
   }
 
   offParticipantReconnected(callback: (data: ParticipantReconnectedEvent) => void): void {
-    if (this.socket) {
-      this.socket.off('participant:reconnected', callback);
-    }
+    this.unregisterListener('participant:reconnected', callback);
   }
 
   offParticipantLeft(callback: (data: ParticipantLeftEvent) => void): void {
-    if (this.socket) {
-      this.socket.off('participant:left', callback);
-    }
+    this.unregisterListener('participant:left', callback);
   }
 
   offError(callback: (data: ErrorGeneralEvent) => void): void {
-    if (this.socket) {
-      this.socket.off('error:general', callback);
-    }
+    this.unregisterListener('error:general', callback);
   }
 }
 

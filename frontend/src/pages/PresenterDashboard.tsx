@@ -8,11 +8,15 @@ import type {
   PollCreatedEvent, 
   PollActivatedEvent, 
   PollClosedEvent,
-  SessionEndedEvent 
+  SessionEndedEvent,
+  ResultsUpdatedEvent
 } from '../types';
 import PollCreationForm from '../components/PollCreationForm';
 import PollManagementList from '../components/PollManagementList';
 import ErrorDisplay from '../components/ErrorDisplay';
+import Navigation from '../components/Navigation';
+import QRCodeDisplay from '../components/QRCodeDisplay';
+import SessionDashboard from '../components/SessionDashboard';
 
 /**
  * Presenter Dashboard Page
@@ -132,27 +136,72 @@ export default function PresenterDashboard() {
   }, []);
 
   // Handle poll activated event
-  const handlePollActivated = useCallback((data: PollActivatedEvent) => {
+  const handlePollActivated = useCallback(async (data: PollActivatedEvent) => {
     console.log('Poll activated:', data);
     
-    setPolls(prevPolls =>
-      prevPolls.map(p => ({
-        ...p,
-        isActive: p.id === data.pollId,
-      }))
-    );
-  }, []);
+    // Fetch all session polls to ensure consistent state
+    try {
+      if (session) {
+        const updatedPolls = await pollApi.getSessionPolls(session.id);
+        console.log('Fetched updated polls after activation:', updatedPolls);
+        setPolls(updatedPolls);
+      }
+    } catch (error) {
+      console.error('Failed to fetch updated polls:', error);
+      // Fallback to simple update
+      setPolls(prevPolls =>
+        prevPolls.map(p => ({
+          ...p,
+          isActive: p.id === data.pollId,
+          options: p.id === data.pollId && p.options
+            ? p.options.map(opt => ({ ...opt, voteCount: opt.voteCount || 0 }))
+            : p.options
+        }))
+      );
+    }
+  }, [session]);
 
   // Handle poll closed event
-  const handlePollClosed = useCallback((data: PollClosedEvent) => {
+  const handlePollClosed = useCallback(async (data: PollClosedEvent) => {
     console.log('Poll closed:', data);
     
+    // Fetch all session polls to ensure consistent state with final vote counts
+    try {
+      if (session) {
+        const updatedPolls = await pollApi.getSessionPolls(session.id);
+        console.log('Fetched updated polls after closure:', updatedPolls);
+        setPolls(updatedPolls);
+      }
+    } catch (error) {
+      console.error('Failed to fetch updated polls:', error);
+      // Fallback to simple update
+      setPolls(prevPolls =>
+        prevPolls.map(p =>
+          p.id === data.pollId
+            ? { ...p, isActive: false, closedAt: data.closedAt }
+            : p
+        )
+      );
+    }
+  }, [session]);
+
+  // Handle results updated event (when votes come in)
+  const handleResultsUpdated = useCallback((data: ResultsUpdatedEvent) => {
+    console.log('Results updated:', data);
+    
     setPolls(prevPolls =>
-      prevPolls.map(p =>
-        p.id === data.pollId
-          ? { ...p, isActive: false, closedAt: data.closedAt }
-          : p
-      )
+      prevPolls.map(p => {
+        if (p.id === data.pollId && data.results?.options) {
+          return {
+            ...p,
+            options: p.options.map(opt => {
+              const updatedOption = data.results.options.find((o: any) => o.id === opt.id);
+              return updatedOption ? { ...opt, voteCount: updatedOption.voteCount } : opt;
+            })
+          };
+        }
+        return p;
+      })
     );
   }, []);
 
@@ -166,20 +215,22 @@ export default function PresenterDashboard() {
 
   // Setup event listeners
   useEffect(() => {
-    if (!wsConnected) return;
+    if (!wsConnected || !session) return;
 
     websocketService.onPollCreated(handlePollCreated);
     websocketService.onPollActivated(handlePollActivated);
     websocketService.onPollClosed(handlePollClosed);
+    websocketService.onResultsUpdated(handleResultsUpdated);
     websocketService.onSessionEnded(handleSessionEnded);
 
     return () => {
       websocketService.offPollCreated(handlePollCreated);
       websocketService.offPollActivated(handlePollActivated);
       websocketService.offPollClosed(handlePollClosed);
+      websocketService.offResultsUpdated(handleResultsUpdated);
       websocketService.offSessionEnded(handleSessionEnded);
     };
-  }, [wsConnected, handlePollCreated, handlePollActivated, handlePollClosed, handleSessionEnded]);
+  }, [wsConnected, session, handlePollCreated, handlePollActivated, handlePollClosed, handleResultsUpdated, handleSessionEnded]);
 
   // Handle poll created callback
   const handlePollCreatedCallback = useCallback((pollId: string) => {
@@ -220,64 +271,81 @@ export default function PresenterDashboard() {
     );
   }
 
+  if (!session) return null;
+
+  const sessionUrl = `${window.location.origin}/session/${session.code}`;
+  const participantCount = 0; // TODO: Track participant count from WebSocket events
+
+  const handleStartSession = async () => {
+    try {
+      await sessionApi.startSession(session.id);
+      setSession({ ...session, status: 'ACTIVE', startedAt: new Date().toISOString() });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start session');
+    }
+  };
+
+  const handleEndSession = async () => {
+    try {
+      await sessionApi.endSession(session.id);
+      setSession({ ...session, status: 'ENDED', endedAt: new Date().toISOString() });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to end session');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Presenter Dashboard</h1>
-              <p className="text-sm text-gray-600">
-                Session Code: <span className="font-mono font-bold text-lg">{sessionCode}</span>
-                {wsConnected && <span className="ml-4 text-green-600">● Live</span>}
-                {!wsConnected && <span className="ml-4 text-gray-400">○ Connecting...</span>}
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="text-sm text-gray-600">
-                Status: <span className={`font-semibold ${
-                  session?.status === 'ACTIVE' ? 'text-green-600' :
-                  session?.status === 'ENDED' ? 'text-red-600' :
-                  'text-yellow-600'
-                }`}>{session?.status}</span>
-              </p>
-              <p className="text-sm text-gray-600">
-                Presenter: <span className="font-semibold">{session?.presenterName}</span>
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
+      <Navigation sessionCode={session.code} userRole="presenter" />
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Session Status Messages */}
-        {session?.status === 'ENDED' && (
-          <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-6">
-            <p className="font-semibold">This session has ended</p>
-            <p className="text-sm">No further polls can be created or activated</p>
+        {error && (
+          <div className="mb-6">
+            <ErrorDisplay message={error} onRetry={() => setError(null)} />
           </div>
         )}
 
-        {session?.status === 'PENDING' && (
+        {/* WebSocket Status */}
+        {!wsConnected && (
           <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg mb-6">
-            <p className="font-semibold">Session is not started yet</p>
-            <p className="text-sm">Start the session to begin creating and activating polls</p>
+            <p className="font-semibold">Connecting to real-time updates...</p>
           </div>
         )}
 
-        {/* Two Column Layout */}
+        {/* Three Column Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          {/* QR Code Display */}
+          <div className="lg:col-span-1">
+            <QRCodeDisplay
+              sessionCode={session.code}
+              sessionUrl={sessionUrl}
+              presenterName={session.presenterName}
+            />
+          </div>
+
+          {/* Session Dashboard */}
+          <div className="lg:col-span-2">
+            <SessionDashboard
+              session={session}
+              participantCount={participantCount}
+              onStartSession={handleStartSession}
+              onEndSession={handleEndSession}
+            />
+          </div>
+        </div>
+
+        {/* Two Column Layout - Polls */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Left Column - Poll Creation */}
           <div>
-            {session && session.status === 'ACTIVE' && (
+            {session.status === 'ACTIVE' && (
               <PollCreationForm
                 sessionId={session.id}
                 onPollCreated={handlePollCreatedCallback}
               />
             )}
-            {session && session.status !== 'ACTIVE' && (
+            {session.status !== 'ACTIVE' && (
               <div className="bg-white rounded-lg shadow-md p-12 text-center">
                 <div className="text-gray-400 mb-4">
                   <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">

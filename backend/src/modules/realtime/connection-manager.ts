@@ -25,11 +25,15 @@ import {
 export class ConnectionManager implements IConnectionManager {
   private connections: Map<string, ClientConnection> = new Map();
   private heartbeatTimers: Map<string, NodeJS.Timeout> = new Map();
+  private onHeartbeatCallback?: (participantId: string) => Promise<void>;
 
   constructor(
     private io: SocketIOServer,
-    private heartbeatInterval: number = 30000
-  ) {}
+    private heartbeatInterval: number = 30000,
+    onHeartbeat?: (participantId: string) => Promise<void>
+  ) {
+    this.onHeartbeatCallback = onHeartbeat;
+  }
 
   /**
    * Handle new client connection.
@@ -186,9 +190,21 @@ export class ConnectionManager implements IConnectionManager {
     connection: ClientConnection
   ): void {
     // Handle heartbeat pong
-    socket.on('heartbeat:pong', () => {
+    socket.on('heartbeat:pong', async () => {
       // Update last activity timestamp
       connection.connectedAt = new Date();
+      
+      // Call heartbeat callback to update participant's last_seen_at
+      if (connection.participantId && this.onHeartbeatCallback) {
+        try {
+          await this.onHeartbeatCallback(connection.participantId);
+        } catch (error) {
+          console.error(
+            `[Realtime] Failed to process heartbeat for participant ${connection.participantId}:`,
+            error instanceof Error ? error.message : 'Unknown error'
+          );
+        }
+      }
     });
 
     // Handle client-initiated disconnect

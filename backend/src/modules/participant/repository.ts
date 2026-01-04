@@ -53,4 +53,15 @@ export class ParticipantRepository {
       where: { id }
     });
   }
+
+  /**
+   * Update participant's last_seen_at timestamp
+   * Used for tracking participant activity via heartbeats
+   */
+  async updateLastSeen(id: string): Promise<void> {
+    await this.prisma.participant.update({
+      where: { id },
+      data: { lastSeenAt: new Date() }
+    });
+  }
 }

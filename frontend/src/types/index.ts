@@ -121,6 +121,19 @@ export interface VoteRejectedEvent {
   timestamp: string;
 }
 
+export interface ResultsUpdatedEvent {
+  pollId: string;
+  sessionId: string;
+  results: {
+    options: Array<{
+      id: string;
+      optionText: string;
+      voteCount: number;
+    }>;
+    totalVotes: number;
+  };
+}
+
 export interface ParticipantJoinedEvent {
   participantId: string;
   sessionId: string;
@@ -175,17 +188,11 @@ export interface ParticipantLeftEvent {
 
 // API Request Types
 export interface CreateSessionRequest {
-  title?: string;
-  description?: string;
+  presenterName?: string;
 }
 
 export interface CreateSessionResponse {
-  sessionId: string;
-  accessCode: string;
-  state: 'Preparing';
-  title: string | null;
-  description: string | null;
-  createdAt: string;
+  session: Session;
 }
 
 export interface StartSessionResponse {
@@ -228,6 +235,9 @@ export interface JoinSessionResponse {
 
 export interface CreatePollRequest {
   question: string;
+  pollType: 'MULTIPLE_CHOICE' | 'RATING_SCALE' | 'OPEN_TEXT';
+  allowMultiple?: boolean;
+  isAnonymous?: boolean;
   options: Array<{
     text: string;
     order?: number;

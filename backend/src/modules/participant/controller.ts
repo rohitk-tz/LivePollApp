@@ -28,9 +28,13 @@ export class ParticipantController {
       });
 
       res.status(200).json({
-        sessionId: participant.sessionId,
-        participantId: participant.id,
-        joinedAt: participant.joinedAt
+        participant: {
+          id: participant.id,
+          sessionId: participant.sessionId,
+          displayName: participant.displayName,
+          joinedAt: participant.joinedAt,
+          lastSeenAt: participant.lastSeenAt
+        }
       });
     } catch (error) {
       if (error instanceof ParticipantValidationError) {

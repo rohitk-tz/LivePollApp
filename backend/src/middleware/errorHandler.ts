@@ -7,6 +7,15 @@ import {
   InvalidSessionStateError,
   SessionCodeGenerationError
 } from '../modules/session/types.js';
+import {
+  InvalidVoteError,
+  PollNotActiveError
+} from '../modules/vote/types.js';
+import {
+  PollNotFoundError,
+  PollValidationError,
+  ActivePollExistsError
+} from '../modules/poll/types.js';
 
 interface ErrorResponse {
   error: string;
@@ -43,6 +52,50 @@ export function errorHandler(
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to generate unique session code'
+    } as ErrorResponse);
+    return;
+  }
+
+  // Vote-specific errors
+  if (err instanceof InvalidVoteError) {
+    console.error('[ErrorHandler] InvalidVoteError:', err.message);
+    res.status(400).json({
+      error: 'Invalid Vote',
+      message: err.message
+    } as ErrorResponse);
+    return;
+  }
+
+  if (err instanceof PollNotActiveError) {
+    console.error('[ErrorHandler] PollNotActiveError:', err.message);
+    res.status(400).json({
+      error: 'Poll Not Active',
+      message: err.message
+    } as ErrorResponse);
+    return;
+  }
+
+  // Poll-specific errors
+  if (err instanceof PollNotFoundError) {
+    res.status(404).json({
+      error: 'Not Found',
+      message: err.message
+    } as ErrorResponse);
+    return;
+  }
+
+  if (err instanceof PollValidationError) {
+    res.status(400).json({
+      error: 'Validation Error',
+      message: err.message
+    } as ErrorResponse);
+    return;
+  }
+
+  if (err instanceof ActivePollExistsError) {
+    res.status(409).json({
+      error: 'Conflict',
+      message: err.message
     } as ErrorResponse);
     return;
   }
