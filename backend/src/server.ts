@@ -1,37 +1,62 @@
 // Server entry point
-// Starts the Express server with database connection
+// Starts the Express server with database connection and WebSocket support
 
 import 'dotenv/config';
+import { createServer } from 'http';
 import { PrismaClient } from '@prisma/client';
 import { createApp } from './app.js';
+import { createRealtimeModule } from './modules/realtime/index.js';
 
 const PORT = process.env.PORT || 3000;
 const prisma = new PrismaClient();
 
 const app = createApp(prisma);
 
-// Start server
-const server = app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Health check: http://localhost:${PORT}/health`);
+// Create HTTP server (required for Socket.IO)
+const httpServer = createServer(app);
+
+// Initialize Realtime module
+const realtimeModule = createRealtimeModule(httpServer, {
+  corsOrigins: [
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:3000'
+  ],
+  heartbeatInterval: 30000,
+  connectionTimeout: 60000
 });
 
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  console.log('SIGTERM received, shutting down gracefully...');
-  server.close(async () => {
-    await prisma.$disconnect();
-    process.exit(0);
-  });
-});
+// Start server with async initialization
+(async () => {
+  try {
+    // Start realtime module
+    await realtimeModule.start();
 
-process.on('SIGINT', async () => {
-  console.log('SIGINT received, shutting down gracefully...');
-  server.close(async () => {
-    await prisma.$disconnect();
-    process.exit(0);
-  });
-});
+    // Start HTTP server
+    const server = httpServer.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+      console.log(`Health check: http://localhost:${PORT}/health`);
+      console.log(`WebSocket endpoint: ws://localhost:${PORT}`);
+    });
+
+    // Graceful shutdown handlers
+    const shutdown = async (signal: string) => {
+      console.log(`${signal} received, shutting down gracefully...`);
+      server.close(async () => {
+        await realtimeModule.stop();
+        await prisma.$disconnect();
+        process.exit(0);
+      });
+    };
+
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT', () => shutdown('SIGINT'));
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+})();
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (reason, promise) => {

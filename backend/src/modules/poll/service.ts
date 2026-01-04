@@ -13,6 +13,7 @@ import {
   PollClosedEvent,
   PollNotFoundError
 } from './types.js';
+import { eventBus, DomainEventType, createDomainEvent } from '../../events/index.js';
 
 export class PollService {
   constructor(
@@ -80,6 +81,21 @@ export class PollService {
       createdAt: poll.createdAt
     };
 
+    // Publish domain event to event bus
+    eventBus.publish(
+      createDomainEvent(
+        DomainEventType.POLL_CREATED,
+        poll.sessionId,
+        {
+          pollId: poll.id,
+          sessionId: poll.sessionId,
+          question: poll.question,
+          pollType: poll.pollType,
+          options: poll.options?.map(opt => ({ id: opt.id, text: opt.optionText }))
+        }
+      )
+    );
+
     return { poll, event };
   }
 
@@ -109,6 +125,19 @@ export class PollService {
       activatedAt
     };
 
+    // Publish domain event to event bus
+    eventBus.publish(
+      createDomainEvent(
+        DomainEventType.POLL_ACTIVATED,
+        poll.sessionId,
+        {
+          pollId: poll.id,
+          sessionId: poll.sessionId,
+          activatedAt
+        }
+      )
+    );
+
     return { poll, event };
   }
 
@@ -135,6 +164,19 @@ export class PollService {
       closedAt,
       totalVotes
     };
+
+    // Publish domain event to event bus
+    eventBus.publish(
+      createDomainEvent(
+        DomainEventType.POLL_CLOSED,
+        poll.sessionId,
+        {
+          pollId: poll.id,
+          sessionId: poll.sessionId,
+          closedAt
+        }
+      )
+    );
 
     return { poll, event };
   }

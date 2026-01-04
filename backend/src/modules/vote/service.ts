@@ -11,6 +11,7 @@ import {
   VoteRejectedEvent,
   VoteNotFoundError
 } from './types.js';
+import { eventBus, DomainEventType, createDomainEvent } from '../../events/index.js';
 
 export class VoteService {
   constructor(
@@ -38,11 +39,28 @@ export class VoteService {
       // Check for duplicate vote
       const hasVoted = await this.repository.hasVoted(input.participantId, input.pollId);
       if (hasVoted) {
+        // Get poll to get sessionId for event routing
+        const poll = await this.validator.getPoll(input.pollId);
+        
         const rejectedEvent: VoteRejectedEvent = {
           pollId: input.pollId,
           participantId: input.participantId,
           reason: 'Participant has already voted on this poll'
         };
+        
+        // Publish VoteRejected domain event
+        eventBus.publish(
+          createDomainEvent(
+            DomainEventType.VOTE_REJECTED,
+            poll.sessionId,
+            {
+              pollId: input.pollId,
+              participantId: input.participantId,
+              reason: 'Participant has already voted on this poll'
+            }
+          )
+        );
+        
         return { event: rejectedEvent };
       }
 
@@ -72,26 +90,102 @@ export class VoteService {
         submittedAt: vote.submittedAt
       };
 
+      // Get poll to get sessionId for event routing
+      const poll = await this.validator.getPoll(vote.pollId);
+      
+      // Publish VoteAccepted domain event
+      eventBus.publish(
+        createDomainEvent(
+          DomainEventType.VOTE_ACCEPTED,
+          poll.sessionId,
+          {
+            voteId: vote.id,
+            pollId: vote.pollId,
+            participantId: vote.participantId,
+            optionId: vote.optionId,
+            submittedAt: vote.submittedAt
+          }
+        )
+      );
+
+      // Publish ResultsUpdated event to trigger real-time updates
+      // TODO: Include actual results in payload
+      eventBus.publish(
+        createDomainEvent(
+          DomainEventType.RESULTS_UPDATED,
+          poll.sessionId,
+          {
+            pollId: vote.pollId,
+            sessionId: poll.sessionId,
+            results: {} // Placeholder - full results would be fetched here
+          }
+        )
+      );
+
       return { vote, event: acceptedEvent };
     } catch (error) {
       // Handle Prisma unique constraint violation for duplicate votes
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        // Get poll to get sessionId for event routing
+        const poll = await this.validator.getPoll(input.pollId);
+        
         const rejectedEvent: VoteRejectedEvent = {
           pollId: input.pollId,
           participantId: input.participantId,
           reason: 'Participant has already voted on this poll'
         };
+        
+        // Publish VoteRejected domain event
+        eventBus.publish(
+          createDomainEvent(
+            DomainEventType.VOTE_REJECTED,
+            poll.sessionId,
+            {
+              pollId: input.pollId,
+              participantId: input.participantId,
+              reason: 'Participant has already voted on this poll'
+            }
+          )
+        );
+        
         return { event: rejectedEvent };
       }
 
       // For validation errors, convert to rejected event
       if (error instanceof Error) {
-        const rejectedEvent: VoteRejectedEvent = {
-          pollId: input.pollId,
-          participantId: input.participantId,
-          reason: error.message
-        };
-        return { event: rejectedEvent };
+        // Try to get poll sessionId for event routing, fallback to error without event
+        try {
+          const poll = await this.validator.getPoll(input.pollId);
+          
+          const rejectedEvent: VoteRejectedEvent = {
+            pollId: input.pollId,
+            participantId: input.participantId,
+            reason: error.message
+          };
+          
+          // Publish VoteRejected domain event
+          eventBus.publish(
+            createDomainEvent(
+              DomainEventType.VOTE_REJECTED,
+              poll.sessionId,
+              {
+                pollId: input.pollId,
+                participantId: input.participantId,
+                reason: error.message
+              }
+            )
+          );
+          
+          return { event: rejectedEvent };
+        } catch {
+          // If we can't get poll, just return rejected event without publishing to event bus
+          const rejectedEvent: VoteRejectedEvent = {
+            pollId: input.pollId,
+            participantId: input.participantId,
+            reason: error.message
+          };
+          return { event: rejectedEvent };
+        }
       }
 
       throw error;

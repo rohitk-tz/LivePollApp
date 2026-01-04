@@ -26,7 +26,7 @@ async function verifyDatabase() {
     process.exit(0);
   } catch (error) {
     console.error('✗ Database Connection: FAILED');
-    console.error('Error:', error.message);
+    console.error('Error:', error instanceof Error ? error.message : String(error));
     await prisma.$disconnect();
     process.exit(1);
   }

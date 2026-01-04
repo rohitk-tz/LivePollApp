@@ -14,6 +14,7 @@ import {
   InvalidSessionStateError,
   SessionCodeGenerationError
 } from './types.js';
+import { eventBus, DomainEventType, createDomainEvent } from '../../events/index.js';
 
 // Generate 6-character alphanumeric codes (uppercase letters and digits)
 const generateCode = customAlphabet('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', 6);
@@ -54,6 +55,19 @@ export class SessionService {
       createdAt: session.createdAt
     };
 
+    // Publish domain event to event bus
+    eventBus.publish(
+      createDomainEvent(
+        DomainEventType.SESSION_CREATED,
+        session.id,
+        {
+          sessionId: session.id,
+          code: session.code,
+          presenterName: session.presenterName
+        }
+      )
+    );
+
     return { session, event };
   }
 
@@ -89,6 +103,18 @@ export class SessionService {
       startedAt: updatedSession.startedAt!
     };
 
+    // Publish domain event to event bus
+    eventBus.publish(
+      createDomainEvent(
+        DomainEventType.SESSION_STARTED,
+        updatedSession.id,
+        {
+          sessionId: updatedSession.id,
+          startedAt: updatedSession.startedAt!
+        }
+      )
+    );
+
     return { session: updatedSession, event };
   }
 
@@ -123,6 +149,18 @@ export class SessionService {
       sessionId: updatedSession.id,
       endedAt: updatedSession.endedAt!
     };
+
+    // Publish domain event to event bus
+    eventBus.publish(
+      createDomainEvent(
+        DomainEventType.SESSION_ENDED,
+        updatedSession.id,
+        {
+          sessionId: updatedSession.id,
+          endedAt: updatedSession.endedAt!
+        }
+      )
+    );
 
     return { session: updatedSession, event };
   }

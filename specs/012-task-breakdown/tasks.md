@@ -210,9 +210,10 @@
 ## Phase 3: Backend Modules - Real-Time Communication
 
 ### Task 3.20: Implement Event Bus
-- [ ] Create event bus for inter-module communication, support publish/subscribe pattern, use Redis pub/sub for horizontal scaling
+- [X] Create event bus for inter-module communication, support publish/subscribe pattern, use Redis pub/sub for horizontal scaling
 - **Responsibility**: Backend
 - **Dependencies**: Task 1.4 (Redis Cache)
+- **Status**: COMPLETED - Created in-process event bus with EventEmitter (Redis integration deferred)
 
 ### Task 3.21: Implement WebSocket Connection Handler
 - [ ] Handle new WebSocket connections, authenticate participant, join session room, send connection:established event

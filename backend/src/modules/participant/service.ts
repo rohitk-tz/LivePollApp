@@ -10,6 +10,7 @@ import {
 } from './types.js';
 import { ParticipantRepository } from './repository.js';
 import { ParticipantValidator } from './validation.js';
+import { eventBus, DomainEventType, createDomainEvent } from '../../events/index.js';
 
 export class ParticipantService {
   private repository: ParticipantRepository;
@@ -51,6 +52,20 @@ export class ParticipantService {
       participantCount
     };
 
+    // Publish domain event to event bus
+    eventBus.publish(
+      createDomainEvent(
+        DomainEventType.PARTICIPANT_JOINED,
+        participant.sessionId,
+        {
+          participantId: participant.id,
+          sessionId: participant.sessionId,
+          displayName: participant.displayName,
+          joinedAt: participant.joinedAt
+        }
+      )
+    );
+
     return { participant, event };
   }
 
@@ -82,13 +97,26 @@ export class ParticipantService {
   }
 
   /**
-   * Remove a participant
+   * Remove a participant (for disconnection)
    */
   async removeParticipant(participantId: string): Promise<void> {
-    // Verify participant exists
-    await this.getParticipant(participantId);
+    // Get participant before deletion to access sessionId
+    const participant = await this.getParticipant(participantId);
 
     // Delete participant
     await this.repository.delete(participantId);
+    
+    // Publish domain event to event bus
+    eventBus.publish(
+      createDomainEvent(
+        DomainEventType.PARTICIPANT_DISCONNECTED,
+        participant.sessionId,
+        {
+          participantId: participant.id,
+          sessionId: participant.sessionId,
+          disconnectedAt: new Date()
+        }
+      )
+    );
   }
 }

@@ -8,6 +8,22 @@ export class VoteValidator {
   constructor(private prisma: PrismaClient) {}
 
   /**
+   * Get poll with sessionId (helper for event routing)
+   */
+  async getPoll(pollId: string): Promise<{ sessionId: string }> {
+    const poll = await this.prisma.poll.findUnique({
+      where: { id: pollId },
+      select: { sessionId: true }
+    });
+
+    if (!poll) {
+      throw new InvalidVoteError(`Poll ${pollId} does not exist`);
+    }
+
+    return { sessionId: poll.sessionId };
+  }
+
+  /**
    * Validate that poll exists and is active (not closed)
    */
   async validatePollActive(pollId: string): Promise<void> {
