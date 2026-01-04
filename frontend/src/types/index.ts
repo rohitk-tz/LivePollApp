@@ -138,3 +138,194 @@ export interface ErrorGeneralEvent {
     entityId: string;
   };
 }
+
+export interface SessionPausedEvent {
+  sessionId: string;
+  state: 'Paused';
+  pausedAt: string;
+}
+
+export interface SessionResumedEvent {
+  sessionId: string;
+  state: 'Active';
+  resumedAt: string;
+}
+
+export interface PollDraftUpdatedEvent {
+  pollId: string;
+  state: 'Draft';
+  question: string;
+  options: PollOption[];
+  updatedAt: string;
+}
+
+export interface ParticipantReconnectedEvent {
+  participantId: string;
+  sessionId: string;
+  connectionState: 'Connected';
+  reconnectedAt: string;
+}
+
+export interface ParticipantLeftEvent {
+  participantId: string;
+  sessionId: string;
+  connectionState: 'Left';
+  leftAt: string;
+}
+
+// API Request Types
+export interface CreateSessionRequest {
+  title?: string;
+  description?: string;
+}
+
+export interface CreateSessionResponse {
+  sessionId: string;
+  accessCode: string;
+  state: 'Preparing';
+  title: string | null;
+  description: string | null;
+  createdAt: string;
+}
+
+export interface StartSessionResponse {
+  sessionId: string;
+  state: 'Active';
+  startedAt: string;
+}
+
+export interface PauseSessionResponse {
+  sessionId: string;
+  state: 'Paused';
+  pausedAt: string;
+}
+
+export interface ResumeSessionResponse {
+  sessionId: string;
+  state: 'Active';
+  resumedAt: string;
+}
+
+export interface EndSessionResponse {
+  sessionId: string;
+  state: 'Ended';
+  endedAt: string;
+  pollCount: number;
+  participantCount: number;
+  totalVotes: number;
+}
+
+export interface JoinSessionRequest {
+  accessCode: string;
+}
+
+export interface JoinSessionResponse {
+  sessionId: string;
+  participantId: string;
+  connectionState: 'Connected';
+  joinedAt: string;
+}
+
+export interface CreatePollRequest {
+  question: string;
+  options: Array<{
+    text: string;
+    order?: number;
+  }>;
+}
+
+export interface CreatePollResponse {
+  pollId: string;
+  sessionId: string;
+  state: 'Draft';
+  question: string;
+  options: Array<{
+    optionId: string;
+    text: string;
+    order: number;
+  }>;
+  createdAt: string;
+}
+
+export interface UpdatePollDraftRequest {
+  question?: string;
+  options?: Array<{
+    optionId?: string;
+    text: string;
+    order?: number;
+  }>;
+}
+
+export interface UpdatePollDraftResponse {
+  pollId: string;
+  state: 'Draft';
+  question: string;
+  options: Array<{
+    optionId: string;
+    text: string;
+    order: number;
+  }>;
+  updatedAt: string;
+}
+
+export interface ActivatePollResponse {
+  pollId: string;
+  sessionId: string;
+  state: 'Active';
+  question: string;
+  options: Array<{
+    optionId: string;
+    text: string;
+    voteCount: number;
+  }>;
+  activatedAt: string;
+}
+
+export interface ClosePollResponse {
+  pollId: string;
+  state: 'Closed';
+  question: string;
+  options: Array<{
+    optionId: string;
+    text: string;
+    voteCount: number;
+  }>;
+  totalVotes: number;
+  closedAt: string;
+}
+
+export interface SubmitVoteRequest {
+  participantId: string;
+  selectedOptionId: string;
+}
+
+export interface SubmitVoteResponse {
+  voteId: string;
+  pollId: string;
+  participantId: string;
+  selectedOptionId: string;
+  status: 'Accepted';
+  submittedAt: string;
+}
+
+export interface ReconnectToSessionRequest {
+  participantId: string;
+}
+
+export interface ReconnectToSessionResponse {
+  participantId: string;
+  sessionId: string;
+  connectionState: 'Connected';
+  reconnectedAt: string;
+}
+
+export interface LeaveSessionRequest {
+  participantId: string;
+}
+
+export interface LeaveSessionResponse {
+  participantId: string;
+  sessionId: string;
+  connectionState: 'Left';
+  leftAt: string;
+}

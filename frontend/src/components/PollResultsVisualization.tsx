@@ -1,4 +1,4 @@
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import type { Poll } from '../types';
 
 interface PollResultsVisualizationProps {
@@ -40,7 +40,7 @@ export default function PollResultsVisualization({ poll }: PollResultsVisualizat
             />
             <YAxis label={{ value: 'Votes', angle: -90, position: 'insideLeft' }} />
             <Tooltip 
-              formatter={(value: number, name: string, props: any) => [
+              formatter={(value: number, _name: string, props: any) => [
                 `${value} votes (${props.payload.percentage}%)`,
                 'Votes'
               ]}

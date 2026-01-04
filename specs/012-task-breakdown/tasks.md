@@ -412,12 +412,12 @@
 - **Dependencies**: Task 1.8 (React Application Structure)
 
 ### Task 6.5: Create Poll Creation Form Component
-- [ ] Create form for poll question, poll type (single/multiple choice), options, anonymity flag, create poll button
+- [X] Create form for poll question, poll type (single/multiple choice), options, anonymity flag, create poll button
 - **Responsibility**: Frontend
 - **Dependencies**: Task 1.8 (React Application Structure)
 
 ### Task 6.6: Create Poll Management Component
-- [ ] Create component listing all session polls, activate/close poll buttons, poll status indicators
+- [X] Create component listing all session polls, activate/close poll buttons, poll status indicators
 - **Responsibility**: Frontend
 - **Dependencies**: Task 1.8 (React Application Structure)
 
@@ -432,7 +432,7 @@
 - **Dependencies**: Task 1.8 (React Application Structure)
 
 ### Task 6.9: Create Voting Component
-- [ ] Create component for participants to select option(s), submit vote button, vote confirmation display
+- [X] Create component for participants to select option(s), submit vote button, vote confirmation display
 - **Responsibility**: Frontend
 - **Dependencies**: Task 1.8 (React Application Structure)
 

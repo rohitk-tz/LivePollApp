@@ -2,13 +2,17 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { sessionApi, pollApi } from '../services/api';
 import { websocketService } from '../services/websocket';
-import type { Session, Poll, PollActivatedEvent, PollClosedEvent, VoteAcceptedEvent, SessionEndedEvent } from '../types';
-import ActivePollsDisplay from '../components/ActivePollsDisplay';
-import VotingComponent from '../components/VotingComponent';
-import PollResultsVisualization from '../components/PollResultsVisualization';
+import type { Session, Poll, PollActivatedEvent, PollClosedEvent, SessionEndedEvent } from '../types';
+import PollDisplay from '../components/PollDisplay';
+import EmptyState from '../components/EmptyState';
 import ErrorDisplay from '../components/ErrorDisplay';
 
-export default function ParticipantPollViewPage() {
+/**
+ * Read-only poll display page for participants
+ * Shows the currently active poll without voting capability
+ * Updates in real-time via WebSocket events
+ */
+export default function ParticipantPollDisplayPage() {
   const { sessionCode } = useParams<{ sessionCode: string }>();
   const navigate = useNavigate();
 
@@ -17,7 +21,6 @@ export default function ParticipantPollViewPage() {
   const [activePoll, setActivePoll] = useState<Poll | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [hasVoted, setHasVoted] = useState<Set<string>>(new Set());
   const [wsConnected, setWsConnected] = useState(false);
 
   const participantId = localStorage.getItem('participantId');
@@ -101,6 +104,9 @@ export default function ParticipantPollViewPage() {
 
   // Handle poll activated event
   const handlePollActivated = useCallback((data: PollActivatedEvent) => {
+    console.log('Poll activated:', data);
+    
+    // Update polls list
     setPolls(prevPolls => {
       // Deactivate all polls
       const updated = prevPolls.map(p => ({
@@ -108,7 +114,7 @@ export default function ParticipantPollViewPage() {
         isActive: p.id === data.pollId,
       }));
       
-      // Set active poll
+      // Find and set active poll
       const active = updated.find(p => p.id === data.pollId);
       setActivePoll(active || null);
 
@@ -118,6 +124,8 @@ export default function ParticipantPollViewPage() {
 
   // Handle poll closed event
   const handlePollClosed = useCallback((data: PollClosedEvent) => {
+    console.log('Poll closed:', data);
+    
     setPolls(prevPolls =>
       prevPolls.map(p =>
         p.id === data.pollId
@@ -126,60 +134,18 @@ export default function ParticipantPollViewPage() {
       )
     );
     
+    // Clear active poll if it was closed
     if (activePoll?.id === data.pollId) {
       setActivePoll(null);
     }
   }, [activePoll]);
 
-  // Handle vote accepted event
-  const handleVoteAccepted = useCallback((data: VoteAcceptedEvent) => {
-    // Update poll vote counts
-    if (data.voteBreakdown) {
-      setPolls(prevPolls =>
-        prevPolls.map(p => {
-          if (p.id === data.pollId) {
-            return {
-              ...p,
-              options: p.options.map(opt => {
-                const breakdown = data.voteBreakdown?.find(b => b.optionId === opt.id);
-                return breakdown
-                  ? { ...opt, voteCount: breakdown.voteCount }
-                  : opt;
-              }),
-            };
-          }
-          return p;
-        })
-      );
-
-      // Update active poll
-      if (activePoll?.id === data.pollId) {
-        setActivePoll(prev => {
-          if (!prev) return null;
-          return {
-            ...prev,
-            options: prev.options.map(opt => {
-              const breakdown = data.voteBreakdown?.find(b => b.optionId === opt.id);
-              return breakdown
-                ? { ...opt, voteCount: breakdown.voteCount }
-                : opt;
-            }),
-          };
-        });
-      }
-    }
-
-    // Mark as voted if this was our vote
-    if (data.participantId === participantId) {
-      setHasVoted(prev => new Set([...prev, data.pollId]));
-    }
-  }, [activePoll, participantId]);
-
   // Handle session ended event
   const handleSessionEnded = useCallback((data: SessionEndedEvent) => {
+    console.log('Session ended:', data);
+    
     setSession(prev => prev ? { ...prev, status: 'ENDED', endedAt: data.endedAt } : null);
     setActivePoll(null);
-    setError('Session has ended');
   }, []);
 
   // Setup event listeners
@@ -188,33 +154,16 @@ export default function ParticipantPollViewPage() {
 
     websocketService.onPollActivated(handlePollActivated);
     websocketService.onPollClosed(handlePollClosed);
-    websocketService.onVoteAccepted(handleVoteAccepted);
     websocketService.onSessionEnded(handleSessionEnded);
 
     return () => {
       websocketService.offPollActivated(handlePollActivated);
       websocketService.offPollClosed(handlePollClosed);
-      websocketService.offVoteAccepted(handleVoteAccepted);
       websocketService.offSessionEnded(handleSessionEnded);
     };
-  }, [wsConnected, handlePollActivated, handlePollClosed, handleVoteAccepted, handleSessionEnded]);
+  }, [wsConnected, handlePollActivated, handlePollClosed, handleSessionEnded]);
 
-  // Handle successful vote submission
-  const handleVoteSuccess = useCallback((voteId: string, selectedOptionId: string) => {
-    console.log('Vote submitted successfully:', { voteId, selectedOptionId });
-    
-    // Mark poll as voted
-    if (activePoll) {
-      setHasVoted(prev => new Set([...prev, activePoll.id]));
-    }
-  }, [activePoll]);
-
-  // Handle vote submission errors
-  const handleVoteError = useCallback((error: any) => {
-    console.error('Vote submission failed:', error);
-    // Error is already displayed in VotingComponent
-  }, []);
-
+  // Loading state
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -226,6 +175,7 @@ export default function ParticipantPollViewPage() {
     );
   }
 
+  // Error state
   if (error && !session) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
@@ -253,7 +203,7 @@ export default function ParticipantPollViewPage() {
                 Status: <span className={`font-semibold ${
                   session?.status === 'ACTIVE' ? 'text-green-600' :
                   session?.status === 'ENDED' ? 'text-red-600' :
-                  'text-yellow-600'
+                  'text-gray-600'
                 }`}>{session?.status}</span>
               </p>
             </div>
@@ -263,8 +213,9 @@ export default function ParticipantPollViewPage() {
 
       {/* Main Content */}
       <div className="max-w-4xl mx-auto px-4 py-8">
+        {/* Session Status Messages */}
         {session?.status === 'ENDED' && (
-          <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg mb-6">
+          <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-6">
             <p className="font-semibold">This session has ended</p>
             <p className="text-sm">Thank you for participating!</p>
           </div>
@@ -277,45 +228,73 @@ export default function ParticipantPollViewPage() {
           </div>
         )}
 
-        {/* Active Poll Section */}
-        {activePoll && (
+        {/* Active Poll Display (Read-Only) */}
+        {activePoll && session?.status !== 'ENDED' && (
           <div className="bg-white rounded-lg shadow-md p-6 mb-6">
             <div className="mb-4">
-              <h2 className="text-xl font-bold text-gray-900 mb-2">Active Poll</h2>
+              <h2 className="text-xl font-bold text-gray-900">Current Poll</h2>
             </div>
-
-            {hasVoted.has(activePoll.id) ? (
-              <PollResultsVisualization poll={activePoll} />
-            ) : (
-              <VotingComponent
-                poll={activePoll}
-                participantId={participantId!}
-                onVoteSuccess={handleVoteSuccess}
-                onVoteError={handleVoteError}
-              />
-            )}
+            <PollDisplay poll={activePoll} />
           </div>
         )}
 
-        {/* All Polls Display */}
-        {!activePoll && polls.length > 0 && (
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">
-              {session?.status === 'ACTIVE' ? 'Waiting for next poll...' : 'Session Polls'}
-            </h2>
-            <ActivePollsDisplay polls={polls} hasVoted={hasVoted} />
-          </div>
+        {/* Empty State: No Active Poll */}
+        {!activePoll && session?.status === 'ACTIVE' && polls.length > 0 && (
+          <EmptyState
+            icon="waiting"
+            title="Waiting for next poll"
+            message="The presenter will activate a poll shortly"
+          />
         )}
 
+        {/* Empty State: No Polls Yet */}
         {polls.length === 0 && session?.status === 'ACTIVE' && (
-          <div className="bg-white rounded-lg shadow-md p-12 text-center">
-            <div className="text-gray-400 mb-4">
-              <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
+          <EmptyState
+            icon="poll"
+            title="No polls yet"
+            message="The presenter will create polls shortly"
+          />
+        )}
+
+        {/* Empty State: Session Ended */}
+        {session?.status === 'ENDED' && (
+          <EmptyState
+            icon="ended"
+            title="Session Ended"
+            message="This polling session has concluded. Thank you for participating!"
+          />
+        )}
+
+        {/* Previous Polls List (Optional - shown when no active poll) */}
+        {!activePoll && polls.length > 0 && session?.status !== 'ENDED' && (
+          <div className="bg-white rounded-lg shadow-md p-6 mt-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Previous Polls</h2>
+            <div className="space-y-4">
+              {polls.filter(p => !p.isActive).map((poll) => (
+                <div key={poll.id} className="border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-start justify-between mb-2">
+                    <h3 className="text-lg font-semibold text-gray-900 flex-1">{poll.question}</h3>
+                    {poll.closedAt && (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                        Closed
+                      </span>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    {poll.options.map((option) => (
+                      <div key={option.id} className="flex items-center justify-between text-sm text-gray-600">
+                        <span>{option.optionText}</span>
+                        {option.voteCount !== undefined && (
+                          <span className="font-medium">
+                            {option.voteCount} {option.voteCount === 1 ? 'vote' : 'votes'}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No polls yet</h3>
-            <p className="text-gray-600">The presenter will create polls shortly</p>
           </div>
         )}
       </div>
