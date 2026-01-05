@@ -1,0 +1,110 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Session {
+  id            String        @id @default(uuid())
+  code          String        @unique @db.VarChar(6)
+  presenterName String        @map("presenter_name") @db.VarChar(255)
+  status        SessionStatus @default(PENDING)
+  createdAt     DateTime      @default(now()) @map("created_at")
+  startedAt     DateTime?     @map("started_at")
+  endedAt       DateTime?     @map("ended_at")
+  participants  Participant[]
+  polls         Poll[]
+
+  @@index([code])
+  @@map("sessions")
+}
+
+model Poll {
+  id            String       @id @default(uuid())
+  sessionId     String       @map("session_id")
+  question      String
+  pollType      PollType     @map("poll_type")
+  status        PollStatus   @default(Draft)
+  allowMultiple Boolean      @default(false) @map("allow_multiple")
+  isAnonymous   Boolean      @default(true) @map("is_anonymous")
+  minRating     Int?         @map("min_rating")
+  maxRating     Int?         @map("max_rating")
+  sequenceOrder Int          @map("sequence_order")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  closedAt      DateTime?    @map("closed_at")
+  options       PollOption[]
+  session       Session      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  votes         Vote[]
+
+  @@index([sessionId])
+  @@index([sessionId, sequenceOrder])
+  @@index([closedAt])
+  @@map("polls")
+}
+
+model PollOption {
+  id            String @id @default(uuid())
+  pollId        String @map("poll_id")
+  optionText    String @map("option_text") @db.VarChar(500)
+  sequenceOrder Int    @map("sequence_order")
+  poll          Poll   @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  votes         Vote[]
+
+  @@unique([pollId, sequenceOrder])
+  @@index([pollId])
+  @@map("poll_options")
+}
+
+model Participant {
+  id          String    @id @default(uuid())
+  sessionId   String    @map("session_id")
+  displayName String?   @map("display_name") @db.VarChar(100)
+  joinedAt    DateTime  @default(now()) @map("joined_at")
+  lastSeenAt  DateTime? @map("last_seen_at")
+  session     Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  votes       Vote[]
+
+  @@index([sessionId])
+  @@index([joinedAt])
+  @@map("participants")
+}
+
+model Vote {
+  id            String      @id @default(uuid())
+  pollId        String      @map("poll_id")
+  participantId String      @map("participant_id")
+  optionId      String?     @map("option_id")
+  ratingValue   Int?        @map("rating_value")
+  textResponse  String?     @map("text_response")
+  submittedAt   DateTime    @default(now()) @map("submitted_at")
+  option        PollOption? @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  participant   Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  poll          Poll        @relation(fields: [pollId], references: [id], onDelete: Cascade)
+
+  @@unique([participantId, pollId])
+  @@index([pollId])
+  @@index([optionId])
+  @@index([submittedAt])
+  @@map("votes")
+}
+
+enum SessionStatus {
+  PENDING
+  ACTIVE
+  ENDED
+}
+
+enum PollType {
+  MULTIPLE_CHOICE
+  RATING_SCALE
+  OPEN_TEXT
+}
+
+enum PollStatus {
+  Draft
+  Active
+  Closed
+}
