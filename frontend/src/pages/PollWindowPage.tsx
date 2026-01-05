@@ -18,7 +18,7 @@ function LivePollWindow({ pollId, initialPoll }: { pollId: string; initialPoll: 
   });
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="h-screen w-screen overflow-hidden bg-gray-50">
       <PollWindowDisplay 
         poll={livePoll} 
         connectionStatus={connectionStatus}

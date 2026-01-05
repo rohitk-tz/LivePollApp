@@ -164,6 +164,7 @@ export class VoteService {
 
       // For validation errors, convert to rejected event
       if (error instanceof Error) {
+        console.log('[Vote] Vote rejected due to validation error:', error.message);
         // Try to get poll sessionId for event routing, fallback to error without event
         try {
           const poll = await this.validator.getPoll(input.pollId);

@@ -31,6 +31,7 @@ export default function PresenterDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
+  const [participantCount, setParticipantCount] = useState(0);
 
   // Retrieve presenter ID from localStorage (in real app, would use auth)
   const presenterId = localStorage.getItem('presenterId') || 'presenter-1';
@@ -57,6 +58,22 @@ export default function PresenterDashboard() {
         // Load polls
         const pollsData = await pollApi.getSessionPolls(sessionData.id);
         setPolls(pollsData);
+
+        // Fetch initial participant count
+        try {
+          const participantsResponse = await fetch(`http://localhost:3000/sessions/${sessionData.id}/participants`);
+          if (participantsResponse.ok) {
+            const participants = await participantsResponse.json();
+            console.log('[Presenter] Initial participants:', participants);
+            setParticipantCount(Array.isArray(participants) ? participants.length : 0);
+          } else {
+            console.warn('[Presenter] Failed to fetch participants, defaulting to 0');
+            setParticipantCount(0);
+          }
+        } catch (err) {
+          console.error('[Presenter] Error fetching participants:', err);
+          setParticipantCount(0);
+        }
 
         setError(null);
       } catch (err) {
@@ -236,6 +253,26 @@ export default function PresenterDashboard() {
     setError('Session has ended');
   }, []);
 
+  // Handle participant joined event
+  const handleParticipantJoined = useCallback((data: any) => {
+    console.log('[Presenter] Participant joined:', data);
+    setParticipantCount(prev => {
+      const newCount = prev + 1;
+      console.log('[Presenter] Participant count updated:', prev, '->', newCount);
+      return newCount;
+    });
+  }, []);
+
+  // Handle participant left event
+  const handleParticipantLeft = useCallback((data: any) => {
+    console.log('[Presenter] Participant left:', data);
+    setParticipantCount(prev => {
+      const newCount = Math.max(0, prev - 1);
+      console.log('[Presenter] Participant count updated:', prev, '->', newCount);
+      return newCount;
+    });
+  }, []);
+
   // Setup event listeners
   useEffect(() => {
     if (!wsConnected || !session) return;
@@ -248,6 +285,8 @@ export default function PresenterDashboard() {
     websocketService.onVoteAccepted(handleVoteAccepted);
     websocketService.onResultsUpdated(handleResultsUpdated);
     websocketService.onSessionEnded(handleSessionEnded);
+    websocketService.onParticipantJoined(handleParticipantJoined);
+    websocketService.onParticipantLeft(handleParticipantLeft);
 
     return () => {
       websocketService.offPollCreated(handlePollCreated);
@@ -256,8 +295,10 @@ export default function PresenterDashboard() {
       websocketService.offVoteAccepted(handleVoteAccepted);
       websocketService.offResultsUpdated(handleResultsUpdated);
       websocketService.offSessionEnded(handleSessionEnded);
+      websocketService.offParticipantJoined(handleParticipantJoined);
+      websocketService.offParticipantLeft(handleParticipantLeft);
     };
-  }, [wsConnected, session, handlePollCreated, handlePollActivated, handlePollClosed, handleVoteAccepted, handleResultsUpdated, handleSessionEnded]);
+  }, [wsConnected, session, handlePollCreated, handlePollActivated, handlePollClosed, handleVoteAccepted, handleResultsUpdated, handleSessionEnded, handleParticipantJoined, handleParticipantLeft]);
 
   // Handle poll created callback
   const handlePollCreatedCallback = useCallback((pollId: string) => {
@@ -301,7 +342,6 @@ export default function PresenterDashboard() {
   if (!session) return null;
 
   const sessionUrl = `${window.location.origin}/session/${session.code}`;
-  const participantCount = 0; // TODO: Track participant count from WebSocket events
 
   const handleStartSession = async () => {
     try {

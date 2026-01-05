@@ -185,9 +185,9 @@ export default function ParticipantPollDisplayPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="h-screen flex flex-col bg-gray-50 overflow-hidden">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b">
+      <div className="bg-white shadow-sm border-b flex-shrink-0">
         <div className="max-w-4xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div>
@@ -211,8 +211,9 @@ export default function ParticipantPollDisplayPage() {
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="max-w-4xl mx-auto px-4 py-8">
+      {/* Main Content - Scrollable */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-4xl mx-auto px-4 py-8">
         {/* Session Status Messages */}
         {session?.status === 'ENDED' && (
           <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-6">
@@ -297,6 +298,7 @@ export default function ParticipantPollDisplayPage() {
             </div>
           </div>
         )}
+        </div>
       </div>
     </div>
   );

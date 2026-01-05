@@ -16,20 +16,20 @@ export function PollWindowDisplay({
   onRetryConnection,
 }: PollWindowDisplayProps) {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-8">
+    <div className="h-full w-full overflow-hidden bg-gradient-to-br from-gray-50 to-gray-100 p-4 flex flex-col">
       {/* Connection Status Indicator */}
       <ConnectionStatusIndicator status={connectionStatus} onRetry={onRetryConnection} />
 
       {/* Poll Question - Large and prominent for presentation */}
-      <div className="mb-8">
-        <h1 className="text-5xl md:text-6xl font-bold text-gray-900 leading-tight mb-4">
+      <div className="mb-4 flex-shrink-0">
+        <h1 className="text-4xl md:text-5xl font-bold text-gray-900 leading-tight mb-2">
           {poll.question}
         </h1>
-        <div className="flex items-center space-x-4 text-xl text-gray-600">
-          <span className="px-4 py-2 bg-white rounded-full shadow-sm">
+        <div className="flex items-center space-x-4 text-lg text-gray-600">
+          <span className="px-3 py-1 bg-white rounded-full shadow-sm">
             📊 Total Votes: <span className="font-bold text-gray-900">{poll.totalVotes}</span>
           </span>
-          <span className={`px-4 py-2 rounded-full shadow-sm ${
+          <span className={`px-3 py-1 rounded-full shadow-sm ${
             poll.status === 'active' 
               ? 'bg-green-100 text-green-800' 
               : poll.status === 'closed'
@@ -44,7 +44,7 @@ export function PollWindowDisplay({
       </div>
 
       {/* Bar Chart - Main visualization */}
-      <div className="bg-white rounded-2xl shadow-2xl p-8">
+      <div className="bg-white rounded-2xl shadow-2xl p-6 flex-1 overflow-hidden flex items-center justify-center">
         <PollBarChart 
           options={poll.options} 
           recentlyUpdatedOptionId={recentlyUpdatedOptionId}
