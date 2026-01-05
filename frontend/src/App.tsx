@@ -4,6 +4,8 @@ import ParticipantPollViewPage from './pages/ParticipantPollViewPage';
 import ParticipantPollDisplayPage from './pages/ParticipantPollDisplayPage';
 import PresenterDashboard from './pages/PresenterDashboard';
 import SessionCreationPage from './pages/SessionCreationPage';
+import { PollWindowPage } from './pages/PollWindowPage';
+import { PollWindowErrorBoundary } from './components/PollWindow/PollWindowErrorBoundary';
 
 function App() {
   return (
@@ -14,6 +16,14 @@ function App() {
         <Route path="/session/:sessionCode" element={<ParticipantPollViewPage />} />
         <Route path="/display/:sessionCode" element={<ParticipantPollDisplayPage />} />
         <Route path="/presenter/:sessionCode" element={<PresenterDashboard />} />
+        <Route 
+          path="/poll-window/:pollId" 
+          element={
+            <PollWindowErrorBoundary>
+              <PollWindowPage />
+            </PollWindowErrorBoundary>
+          } 
+        />
         <Route path="*" element={
           <div className="flex items-center justify-center min-h-screen">
             <div className="text-center">

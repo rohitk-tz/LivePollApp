@@ -309,4 +309,14 @@ export const voteApi = {
       }
     );
   },
+
+  /**
+   * Check if a participant has already voted on a poll
+   * GET /polls/{pollId}/participants/{participantId}/voted
+   */
+  async hasVoted(pollId: string, participantId: string): Promise<{ hasVoted: boolean }> {
+    return fetchWithErrorHandling<{ hasVoted: boolean }>(
+      `${API_BASE_URL}/polls/${pollId}/participants/${participantId}/voted`
+    );
+  },
 };

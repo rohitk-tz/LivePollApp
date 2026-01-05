@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { sessionApi, pollApi } from '../services/api';
+import { sessionApi, pollApi, voteApi } from '../services/api';
 import { websocketService } from '../services/websocket';
 import type { Session, Poll, PollActivatedEvent, PollClosedEvent, VoteAcceptedEvent, SessionEndedEvent } from '../types';
 import ActivePollsDisplay from '../components/ActivePollsDisplay';
@@ -51,6 +51,24 @@ export default function ParticipantPollViewPage() {
         // Load polls
         const pollsData = await pollApi.getSessionPolls(sessionData.id);
         setPolls(pollsData);
+
+        // Check voting status for all polls
+        if (participantId) {
+          const votedPollIds = new Set<string>();
+          await Promise.all(
+            pollsData.map(async (poll) => {
+              try {
+                const { hasVoted } = await voteApi.hasVoted(poll.id, participantId);
+                if (hasVoted) {
+                  votedPollIds.add(poll.id);
+                }
+              } catch (err) {
+                console.error(`Failed to check voting status for poll ${poll.id}:`, err);
+              }
+            })
+          );
+          setHasVoted(votedPollIds);
+        }
 
         // Find active poll
         const active = pollsData.find(p => p.isActive);
@@ -107,9 +125,24 @@ export default function ParticipantPollViewPage() {
   }, [session, participantId]);
 
   // Handle poll activated event
-  const handlePollActivated = useCallback((data: PollActivatedEvent) => {
+  const handlePollActivated = useCallback(async (data: PollActivatedEvent) => {
+    console.log('[Participant] Poll activated event received:', data);
+    console.log('[Participant] Looking for poll with ID:', data.pollId);
+    
+    // Check if we have this poll locally
     setPolls(prevPolls => {
-      // Deactivate all polls
+      const pollExists = prevPolls.some(p => p.id === data.pollId);
+      console.log('[Participant] Poll exists locally:', pollExists);
+      console.log('[Participant] Current poll IDs:', prevPolls.map(p => p.id));
+      
+      if (!pollExists) {
+        // Poll not found locally, need to fetch updated polls
+        console.log('[Participant] Poll not found locally, fetching updated polls...');
+        // Trigger a refetch (will be handled below)
+        return prevPolls;
+      }
+      
+      // Deactivate all polls and activate the new one
       const updated = prevPolls.map(p => ({
         ...p,
         isActive: p.id === data.pollId,
@@ -117,11 +150,28 @@ export default function ParticipantPollViewPage() {
       
       // Set active poll
       const active = updated.find(p => p.id === data.pollId);
+      console.log('[Participant] New active poll:', active);
       setActivePoll(active || null);
 
       return updated;
     });
-  }, []);
+    
+    // If poll doesn't exist, fetch updated polls list
+    if (session) {
+      try {
+        const pollsData = await pollApi.getSessionPolls(session.id);
+        console.log('[Participant] Fetched updated polls:', pollsData.length);
+        setPolls(pollsData);
+        
+        // Find and set the active poll
+        const active = pollsData.find(p => p.id === data.pollId);
+        console.log('[Participant] Active poll after fetch:', active);
+        setActivePoll(active || null);
+      } catch (err) {
+        console.error('[Participant] Failed to fetch updated polls:', err);
+      }
+    }
+  }, [session]);
 
   // Handle poll closed event
   const handlePollClosed = useCallback((data: PollClosedEvent) => {
@@ -140,6 +190,10 @@ export default function ParticipantPollViewPage() {
 
   // Handle vote accepted event
   const handleVoteAccepted = useCallback((data: VoteAcceptedEvent) => {
+    console.log('[Participant] Vote accepted event received:', data);
+    console.log('[Participant] Current participantId:', participantId);
+    console.log('[Participant] Event participantId:', data.participantId);
+    
     // Update poll vote counts
     if (data.voteBreakdown) {
       setPolls(prevPolls =>
@@ -178,7 +232,14 @@ export default function ParticipantPollViewPage() {
 
     // Mark as voted if this was our vote
     if (data.participantId === participantId) {
-      setHasVoted(prev => new Set([...prev, data.pollId]));
+      console.log('[Participant] Marking poll as voted:', data.pollId);
+      setHasVoted(prev => {
+        const updated = new Set([...prev, data.pollId]);
+        console.log('[Participant] Updated hasVoted set:', Array.from(updated));
+        return updated;
+      });
+    } else {
+      console.log('[Participant] Not marking as voted - participant ID mismatch');
     }
   }, [activePoll, participantId]);
 
@@ -193,12 +254,17 @@ export default function ParticipantPollViewPage() {
   useEffect(() => {
     if (!wsConnected) return;
 
+    console.log('[Participant] Setting up WebSocket event listeners');
+    
     websocketService.onPollActivated(handlePollActivated);
     websocketService.onPollClosed(handlePollClosed);
     websocketService.onVoteAccepted(handleVoteAccepted);
     websocketService.onSessionEnded(handleSessionEnded);
 
+    console.log('[Participant] Event listeners registered');
+
     return () => {
+      console.log('[Participant] Cleaning up WebSocket event listeners');
       websocketService.offPollActivated(handlePollActivated);
       websocketService.offPollClosed(handlePollClosed);
       websocketService.offVoteAccepted(handleVoteAccepted);
@@ -208,11 +274,15 @@ export default function ParticipantPollViewPage() {
 
   // Handle successful vote submission
   const handleVoteSuccess = useCallback((voteId: string, selectedOptionId: string) => {
-    console.log('Vote submitted successfully:', { voteId, selectedOptionId });
+    console.log('[Participant] Vote submitted successfully:', { voteId, selectedOptionId, activePollId: activePoll?.id });
     
     // Mark poll as voted
     if (activePoll) {
-      setHasVoted(prev => new Set([...prev, activePoll.id]));
+      setHasVoted(prev => {
+        const updated = new Set([...prev, activePoll.id]);
+        console.log('[Participant] Updated hasVoted set:', Array.from(updated));
+        return updated;
+      });
     }
   }, [activePoll]);
 
@@ -289,17 +359,24 @@ export default function ParticipantPollViewPage() {
           <div className="bg-white rounded-lg shadow-md p-6 mb-6">
             <div className="mb-4">
               <h2 className="text-xl font-bold text-gray-900 mb-2">Active Poll</h2>
+              {console.log('[Participant] Rendering active poll section. hasVoted:', hasVoted.has(activePoll.id), 'pollId:', activePoll.id)}
             </div>
 
             {hasVoted.has(activePoll.id) ? (
-              <PollResultsVisualization poll={activePoll} />
+              <>
+                {console.log('[Participant] Showing results for poll:', activePoll.id)}
+                <PollResultsVisualization poll={activePoll} />
+              </>
             ) : (
-              <VotingComponent
-                poll={activePoll}
-                participantId={participantId!}
-                onVoteSuccess={handleVoteSuccess}
-                onVoteError={handleVoteError}
-              />
+              <>
+                {console.log('[Participant] Showing voting form for poll:', activePoll.id)}
+                <VotingComponent
+                  poll={activePoll}
+                  participantId={participantId!}
+                  onVoteSuccess={handleVoteSuccess}
+                  onVoteError={handleVoteError}
+                />
+              </>
             )}
           </div>
         )}

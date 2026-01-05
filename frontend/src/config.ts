@@ -23,6 +23,25 @@ const config = {
     name: 'Live Poll App',
     version: '1.0.0',
   },
+
+  // Poll Window Chart configuration
+  pollWindow: {
+    chart: {
+      layout: 'horizontal' as const,
+      barSize: 40,
+      animationDuration: 800,
+      fontSize: {
+        question: 36,
+        optionLabel: 24,
+        voteCount: 24,
+      },
+    },
+    window: {
+      width: 1200,
+      height: 800,
+      features: 'menubar=no,toolbar=no,location=no,status=no',
+    },
+  },
 };
 
 export default config;

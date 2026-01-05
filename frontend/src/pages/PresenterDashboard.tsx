@@ -187,7 +187,7 @@ export default function PresenterDashboard() {
 
   // Handle results updated event (when votes come in)
   const handleResultsUpdated = useCallback((data: ResultsUpdatedEvent) => {
-    console.log('Results updated:', data);
+    console.log('[Presenter] Results updated:', data);
     
     setPolls(prevPolls =>
       prevPolls.map(p => {
@@ -205,6 +205,29 @@ export default function PresenterDashboard() {
     );
   }, []);
 
+  // Handle vote accepted event (for real-time vote updates)
+  const handleVoteAccepted = useCallback((data: any) => {
+    console.log('[Presenter] Vote accepted:', data);
+    
+    // Update poll vote counts with the vote breakdown from the event
+    if (data.voteBreakdown) {
+      setPolls(prevPolls =>
+        prevPolls.map(p => {
+          if (p.id === data.pollId) {
+            return {
+              ...p,
+              options: p.options.map(opt => {
+                const breakdown = data.voteBreakdown.find((b: any) => b.optionId === opt.id);
+                return breakdown ? { ...opt, voteCount: breakdown.voteCount } : opt;
+              })
+            };
+          }
+          return p;
+        })
+      );
+    }
+  }, []);
+
   // Handle session ended event
   const handleSessionEnded = useCallback((data: SessionEndedEvent) => {
     console.log('Session ended:', data);
@@ -217,9 +240,12 @@ export default function PresenterDashboard() {
   useEffect(() => {
     if (!wsConnected || !session) return;
 
+    console.log('[Presenter] Setting up WebSocket event listeners');
+    
     websocketService.onPollCreated(handlePollCreated);
     websocketService.onPollActivated(handlePollActivated);
     websocketService.onPollClosed(handlePollClosed);
+    websocketService.onVoteAccepted(handleVoteAccepted);
     websocketService.onResultsUpdated(handleResultsUpdated);
     websocketService.onSessionEnded(handleSessionEnded);
 
@@ -227,10 +253,11 @@ export default function PresenterDashboard() {
       websocketService.offPollCreated(handlePollCreated);
       websocketService.offPollActivated(handlePollActivated);
       websocketService.offPollClosed(handlePollClosed);
+      websocketService.offVoteAccepted(handleVoteAccepted);
       websocketService.offResultsUpdated(handleResultsUpdated);
       websocketService.offSessionEnded(handleSessionEnded);
     };
-  }, [wsConnected, session, handlePollCreated, handlePollActivated, handlePollClosed, handleResultsUpdated, handleSessionEnded]);
+  }, [wsConnected, session, handlePollCreated, handlePollActivated, handlePollClosed, handleVoteAccepted, handleResultsUpdated, handleSessionEnded]);
 
   // Handle poll created callback
   const handlePollCreatedCallback = useCallback((pollId: string) => {

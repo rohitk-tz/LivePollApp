@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { pollApi } from '../services/api';
 import { ApiError, isApiError, ApiErrorCode } from '../services/errors';
 import type { Poll } from '../types';
+import config from '../config';
 
 interface PollManagementListProps {
   polls: Poll[];
@@ -19,6 +20,21 @@ export default function PollManagementList({
   const [activatingPollId, setActivatingPollId] = useState<string | null>(null);
   const [closingPollId, setClosingPollId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Handle opening poll in new window
+  const handlePollClick = (pollId: string) => {
+    const { width, height, features } = config.pollWindow.window;
+    const windowFeatures = `width=${width},height=${height},${features}`;
+    const windowName = `poll-window-${pollId}`;
+    const url = `/poll-window/${pollId}`;
+    
+    const pollWindow = window.open(url, windowName, windowFeatures);
+    
+    if (!pollWindow || pollWindow.closed || typeof pollWindow.closed === 'undefined') {
+      // Popup was blocked
+      alert('Please allow popups for this site to open poll windows.\n\nIn your browser settings, enable popups for this domain and try again.');
+    }
+  };
 
   const handleActivatePoll = async (pollId: string) => {
     setActivatingPollId(pollId);
@@ -182,7 +198,13 @@ export default function PollManagementList({
             {/* Poll Header */}
             <div className="flex items-start justify-between mb-3">
               <div className="flex-1">
-                <h3 className="text-lg font-semibold text-gray-900 mb-1">{poll.question}</h3>
+                <h3 
+                  className="text-lg font-semibold text-gray-900 mb-1 cursor-pointer hover:text-blue-600 hover:underline transition-colors"
+                  onClick={() => handlePollClick(poll.id)}
+                  title="Click to open in new window"
+                >
+                  {poll.question}
+                </h3>
                 <div className="flex items-center space-x-4 text-sm text-gray-600">
                   <span>{poll.options.length} options</span>
                   {(poll.isActive || poll.closedAt) && (

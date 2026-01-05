@@ -241,6 +241,60 @@ export class ConnectionManager implements IConnectionManager {
 
       connection.status = ConnectionStatus.CONNECTED;
     });
+
+    // Handle poll room subscription (for interactive poll windows)
+    socket.on('poll:subscribe', async ({ pollId }: { pollId: string }) => {
+      if (!pollId || typeof pollId !== 'string') {
+        socket.emit('poll:subscribe:error', {
+          error: 'Invalid pollId parameter',
+          timestamp: new Date().toISOString()
+        });
+        return;
+      }
+
+      try {
+        const pollRoom = `poll:${pollId}`;
+        await socket.join(pollRoom);
+        console.log(
+          `[Realtime] Socket ${socket.id} subscribed to poll room: ${pollRoom}`
+        );
+
+        socket.emit('poll:subscribe:success', {
+          pollId,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error(
+          `[Realtime] Failed to subscribe socket ${socket.id} to poll ${pollId}:`,
+          errorMessage
+        );
+        socket.emit('poll:subscribe:error', {
+          error: errorMessage,
+          timestamp: new Date().toISOString()
+        });
+      }
+    });
+
+    // Handle poll room unsubscription
+    socket.on('poll:unsubscribe', async ({ pollId }: { pollId: string }) => {
+      if (!pollId || typeof pollId !== 'string') {
+        return;
+      }
+
+      try {
+        const pollRoom = `poll:${pollId}`;
+        await socket.leave(pollRoom);
+        console.log(
+          `[Realtime] Socket ${socket.id} unsubscribed from poll room: ${pollRoom}`
+        );
+      } catch (error) {
+        console.error(
+          `[Realtime] Failed to unsubscribe socket ${socket.id} from poll ${pollId}:`,
+          error instanceof Error ? error.message : 'Unknown error'
+        );
+      }
+    });
   }
 
   /**

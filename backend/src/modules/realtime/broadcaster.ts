@@ -73,6 +73,37 @@ export class EventBroadcaster implements IEventBroadcaster {
   }
 
   /**
+   * Broadcast an event to all clients in a poll-specific room.
+   * Used for interactive poll windows that subscribe to individual polls.
+   */
+  async broadcastToPoll(
+    pollId: string,
+    eventType: string,
+    payload: any
+  ): Promise<void> {
+    try {
+      const pollRoom = `poll:${pollId}`;
+      
+      // Emit directly to poll room with poll-specific event name
+      this.io.to(pollRoom).emit(eventType, {
+        ...payload,
+        timestamp: new Date().toISOString()
+      });
+
+      console.log(
+        `[Realtime] Broadcast ${eventType} to poll room ${pollRoom}`
+      );
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      console.error(
+        `[Realtime] Failed to broadcast to poll ${pollId}:`,
+        errorMessage
+      );
+    }
+  }
+
+  /**
    * Create a WebSocket event from domain event data.
    */
   private createWebSocketEvent<T>(
@@ -240,6 +271,18 @@ export class EventBroadcaster implements IEventBroadcaster {
       domainEvent.payload
     );
     await this.broadcast(domainEvent.sessionId, event);
+
+    // Also broadcast to poll-specific room for interactive poll windows
+    if (domainEvent.payload.pollId) {
+      await this.broadcastToPoll(
+        domainEvent.payload.pollId,
+        `poll:${domainEvent.payload.pollId}:updated`,
+        {
+          pollId: domainEvent.payload.pollId,
+          status: 'active'
+        }
+      );
+    }
   }
 
   /**
@@ -252,18 +295,105 @@ export class EventBroadcaster implements IEventBroadcaster {
       domainEvent.payload
     );
     await this.broadcast(domainEvent.sessionId, event);
+
+    // Also broadcast to poll-specific room for interactive poll windows
+    if (domainEvent.payload.pollId) {
+      await this.broadcastToPoll(
+        domainEvent.payload.pollId,
+        `poll:${domainEvent.payload.pollId}:updated`,
+        {
+          pollId: domainEvent.payload.pollId,
+          status: 'closed'
+        }
+      );
+    }
   }
 
   /**
    * Handle vote accepted event.
    */
   private async handleVoteAccepted(domainEvent: VoteAcceptedEvent): Promise<void> {
+    // Fetch vote breakdown for the poll
+    let voteBreakdown: Array<{ optionId: string; voteCount: number; percentage: number }> = [];
+    let currentVoteCount = 0;
+    
+    if (domainEvent.payload.pollId) {
+      try {
+        const { PrismaClient } = await import('@prisma/client');
+        const prisma = new PrismaClient();
+        
+        // Get all votes for this poll grouped by option
+        const votes = await prisma.vote.groupBy({
+          by: ['optionId'],
+          where: {
+            pollId: domainEvent.payload.pollId
+          },
+          _count: {
+            id: true
+          }
+        });
+        
+        // Get total vote count
+        currentVoteCount = await prisma.vote.count({
+          where: {
+            pollId: domainEvent.payload.pollId
+          }
+        });
+        
+        // Calculate percentages
+        voteBreakdown = votes.map(v => ({
+          optionId: v.optionId,
+          voteCount: v._count.id,
+          percentage: currentVoteCount > 0 ? (v._count.id / currentVoteCount) * 100 : 0
+        }));
+        
+        await prisma.$disconnect();
+      } catch (error) {
+        console.error('[Broadcaster] Failed to fetch vote breakdown:', error);
+      }
+    }
+    
+    // Create enriched event with vote breakdown
+    const enrichedPayload = {
+      ...domainEvent.payload,
+      currentVoteCount,
+      voteBreakdown
+    };
+    
     const event = this.createWebSocketEvent(
       'vote:accepted',
       domainEvent.sessionId,
-      domainEvent.payload
+      enrichedPayload
     );
     await this.broadcast(domainEvent.sessionId, event);
+
+    // Also broadcast to poll-specific room for interactive poll windows
+    if (domainEvent.payload.pollId && domainEvent.payload.optionId) {
+      try {
+        // Find the vote count for the specific option from the breakdown we already fetched
+        const optionBreakdown = voteBreakdown.find(v => v.optionId === domainEvent.payload.optionId);
+        const newVoteCount = optionBreakdown ? optionBreakdown.voteCount : 0;
+
+        console.log(`[Broadcaster] Broadcasting vote update to poll room: poll:${domainEvent.payload.pollId}`);
+        
+        // Emit poll-specific event with updated vote count
+        await this.broadcastToPoll(
+          domainEvent.payload.pollId,
+          `poll:${domainEvent.payload.pollId}:vote-submitted`,
+          {
+            pollId: domainEvent.payload.pollId,
+            optionId: domainEvent.payload.optionId,
+            newVoteCount,
+            voteId: domainEvent.payload.voteId
+          }
+        );
+      } catch (error) {
+        console.error(
+          `[Realtime] Failed to broadcast vote update to poll room:`,
+          error instanceof Error ? error.message : 'Unknown error'
+        );
+      }
+    }
   }
 
   /**

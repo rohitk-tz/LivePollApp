@@ -108,8 +108,16 @@ export class VoteService {
         )
       );
 
+      // Fetch updated results for the poll
+      const votesByOption = await this.repository.groupVotesByOption(vote.pollId);
+      const totalVotes = votesByOption.reduce((sum, opt) => sum + opt.voteCount, 0);
+      
+      const resultsWithPercentages = votesByOption.map(opt => ({
+        ...opt,
+        percentage: totalVotes > 0 ? (opt.voteCount / totalVotes) * 100 : 0
+      }));
+
       // Publish ResultsUpdated event to trigger real-time updates
-      // TODO: Include actual results in payload
       eventBus.publish(
         createDomainEvent(
           DomainEventType.RESULTS_UPDATED,
@@ -117,7 +125,10 @@ export class VoteService {
           {
             pollId: vote.pollId,
             sessionId: poll.sessionId,
-            results: {} // Placeholder - full results would be fetched here
+            results: {
+              options: resultsWithPercentages,
+              totalVotes
+            }
           }
         )
       );

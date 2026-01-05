@@ -123,14 +123,19 @@ class WebSocketService {
         // Call all registered listeners for this event type
         if (eventType && payload) {
           const listeners = this.eventListeners.get(eventType);
+          console.log(`[WebSocket] Found ${listeners?.size || 0} listeners for ${eventType}`);
+          
           if (listeners) {
-            listeners.forEach(callback => {
+            listeners.forEach((callback, index) => {
               try {
+                console.log(`[WebSocket] Calling listener ${index + 1}/${listeners.size} for ${eventType}`);
                 callback(payload);
               } catch (error) {
                 console.error(`Error in ${eventType} listener:`, error);
               }
             });
+          } else {
+            console.warn(`[WebSocket] No listeners registered for ${eventType}`);
           }
         }
       });
